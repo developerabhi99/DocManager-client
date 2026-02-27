@@ -4,8 +4,8 @@ import {
   Button,
   Flex,
   Icon,
-  Image,
-  Link,
+  // Image,
+  // Link,
   Menu,
   MenuButton,
   MenuItem,
@@ -20,14 +20,19 @@ import { SearchBar } from 'components/navbar/searchBar/SearchBar';
 import { SidebarResponsive } from 'components/sidebar/Sidebar';
 import PropTypes from 'prop-types';
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from 'contexts/AuthContext';
 // Assets
-import navImage from 'assets/img/layout/Navbar.png';
-import { MdNotificationsNone, MdInfoOutline } from 'react-icons/md';
+// import navImage from 'assets/img/layout/Navbar.png';
+import { MdNotificationsNone } from 'react-icons/md';
 import { IoMdMoon, IoMdSunny } from 'react-icons/io';
 import { FaEthereum } from 'react-icons/fa';
 import routes from 'routes';
+
 export default function HeaderLinks(props) {
   const { secondary } = props;
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
   const { colorMode, toggleColorMode } = useColorMode();
   // Chakra Color Mode
   const navbarIcon = useColorModeValue('gray.400', 'white');
@@ -42,7 +47,19 @@ export default function HeaderLinks(props) {
     '14px 17px 40px 4px rgba(112, 144, 176, 0.18)',
     '14px 17px 40px 4px rgba(112, 144, 176, 0.06)',
   );
-  const borderButton = useColorModeValue('secondaryGray.500', 'whiteAlpha.200');
+  //const borderButton = useColorModeValue('secondaryGray.500', 'whiteAlpha.200');
+
+  const userName = user?.name || user?.email || 'User';
+  const userImageUrl =
+    typeof user?.imageUrl === 'string' && user.imageUrl.trim() !== ''
+      ? user.imageUrl
+      : undefined;
+
+  const handleLogout = () => {
+    logout();
+    navigate('/auth/sign-in', { replace: true });
+  };
+
   return (
     <Flex
       w={{ sm: '100%', md: 'auto' }}
@@ -143,7 +160,7 @@ export default function HeaderLinks(props) {
               borderRadius="8px"
               mb="10px"
             >
-              <ItemContent info="Horizon UI Dashboard PRO" />
+              <ItemContent info="Test Notification" />
             </MenuItem>
             <MenuItem
               _hover={{ bg: 'none' }}
@@ -152,13 +169,13 @@ export default function HeaderLinks(props) {
               borderRadius="8px"
               mb="10px"
             >
-              <ItemContent info="Horizon Design System Free" />
+              <ItemContent info="Test Notification" />
             </MenuItem>
           </Flex>
         </MenuList>
       </Menu>
 
-      <Menu>
+      {/* <Menu>
         <MenuButton p="0px">
           <Icon
             mt="6px"
@@ -218,7 +235,7 @@ export default function HeaderLinks(props) {
             </Link>
           </Flex>
         </MenuList>
-      </Menu>
+      </Menu> */}
 
       <Button
         variant="no-hover"
@@ -243,7 +260,8 @@ export default function HeaderLinks(props) {
           <Avatar
             _hover={{ cursor: 'pointer' }}
             color="white"
-            name="Adela Parkson"
+            name={userName}
+            src={userImageUrl}
             bg="#11047A"
             size="sm"
             w="40px"
@@ -270,7 +288,7 @@ export default function HeaderLinks(props) {
               fontWeight="700"
               color={textColor}
             >
-              👋&nbsp; Hey, Adela
+              👋&nbsp; Hey, {userName}
             </Text>
           </Flex>
           <Flex flexDirection="column" p="10px">
@@ -279,23 +297,25 @@ export default function HeaderLinks(props) {
               _focus={{ bg: 'none' }}
               borderRadius="8px"
               px="14px"
+              onClick={() => navigate('/admin/profile')}
             >
               <Text fontSize="sm">Profile Settings</Text>
             </MenuItem>
-            <MenuItem
+            {/* <MenuItem
               _hover={{ bg: 'none' }}
               _focus={{ bg: 'none' }}
               borderRadius="8px"
               px="14px"
             >
               <Text fontSize="sm">Newsletter Settings</Text>
-            </MenuItem>
+            </MenuItem> */}
             <MenuItem
               _hover={{ bg: 'none' }}
               _focus={{ bg: 'none' }}
               color="red.400"
               borderRadius="8px"
               px="14px"
+              onClick={handleLogout}
             >
               <Text fontSize="sm">Log out</Text>
             </MenuItem>

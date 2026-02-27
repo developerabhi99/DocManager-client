@@ -2,18 +2,24 @@ import React from 'react';
 
 import { Icon } from '@chakra-ui/react';
 import {
-  MdBarChart,
+  //MdBarChart,
   MdPerson,
+  MdPeople,
   MdHome,
+  MdSecurity,
   MdLock,
-  MdOutlineShoppingCart,
+  MdEventAvailable,
+  //MdOutlineShoppingCart,
 } from 'react-icons/md';
 
 // Admin Imports
 import MainDashboard from 'views/admin/default';
-import NFTMarketplace from 'views/admin/marketplace';
+//import NFTMarketplace from 'views/admin/marketplace';
 import Profile from 'views/admin/profile';
-import DataTables from 'views/admin/dataTables';
+import UsersAdmin from 'views/admin/users';
+import AccessControlAdmin from 'views/admin/accessControl';
+import AppointmentsAdmin from 'views/admin/appointments';
+//import DataTables from 'views/admin/dataTables';
 import RTL from 'views/admin/rtl';
 
 // Auth Imports
@@ -27,34 +33,55 @@ const routes = [
     icon: <Icon as={MdHome} width="20px" height="20px" color="inherit" />,
     component: <MainDashboard />,
   },
-  {
-    name: 'NFT Marketplace',
-    layout: '/admin',
-    path: '/nft-marketplace',
-    icon: (
-      <Icon
-        as={MdOutlineShoppingCart}
-        width="20px"
-        height="20px"
-        color="inherit"
-      />
-    ),
-    component: <NFTMarketplace />,
-    secondary: true,
-  },
-  {
-    name: 'Data Tables',
-    layout: '/admin',
-    icon: <Icon as={MdBarChart} width="20px" height="20px" color="inherit" />,
-    path: '/data-tables',
-    component: <DataTables />,
-  },
+  // {
+  //   name: 'NFT Marketplace',
+  //   layout: '/admin',
+  //   path: '/nft-marketplace',
+  //   icon: (
+  //     <Icon
+  //       as={MdOutlineShoppingCart}
+  //       width="20px"
+  //       height="20px"
+  //       color="inherit"
+  //     />
+  //   ),
+  //   component: <NFTMarketplace />,
+  //   secondary: true,
+  // },
+  // {
+  //   name: 'Data Tables',
+  //   layout: '/admin',
+  //   icon: <Icon as={MdBarChart} width="20px" height="20px" color="inherit" />,
+  //   path: '/data-tables',
+  //   component: <DataTables />,
+  // },
   {
     name: 'Profile',
     layout: '/admin',
     path: '/profile',
     icon: <Icon as={MdPerson} width="20px" height="20px" color="inherit" />,
     component: <Profile />,
+  },
+  {
+    name: 'Users',
+    layout: '/admin',
+    path: '/users',
+    icon: <Icon as={MdPeople} width="20px" height="20px" color="inherit" />,
+    component: <UsersAdmin />,
+  },
+  {
+    name: 'Access Control',
+    layout: '/admin',
+    path: '/access-control',
+    icon: <Icon as={MdSecurity} width="20px" height="20px" color="inherit" />,
+    component: <AccessControlAdmin />,
+  },
+  {
+    name: 'Appointments',
+    layout: '/admin',
+    path: '/appointments',
+    icon: <Icon as={MdEventAvailable} width="20px" height="20px" color="inherit" />,
+    component: <AppointmentsAdmin />,
   },
   {
     name: 'Sign In',

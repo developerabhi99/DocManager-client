@@ -3,10 +3,12 @@ import React from "react";
 import { NavLink, useLocation } from "react-router-dom";
 // chakra imports
 import { Box, Flex, HStack, Text, useColorModeValue } from "@chakra-ui/react";
+import { useAuth } from "contexts/AuthContext";
 
 export function SidebarLinks(props) {
   //   Chakra color mode
   let location = useLocation();
+  const { isAuthenticated } = useAuth();
   let activeColor = useColorModeValue("gray.700", "white");
   let inactiveColor = useColorModeValue(
     "secondaryGray.600",
@@ -51,6 +53,9 @@ export function SidebarLinks(props) {
         route.layout === "/auth" ||
         route.layout === "/rtl"
       ) {
+        if (isAuthenticated && route.layout === "/auth" && route.path === "/sign-in") {
+          return null;
+        }
         return (
           <NavLink key={index} to={route.layout + route.path}>
             {route.icon ? (

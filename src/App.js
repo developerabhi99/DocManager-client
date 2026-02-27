@@ -12,27 +12,41 @@ import initialTheme from './theme/theme'; //  { themeGreen }
 import { useState } from 'react';
 // Chakra imports
 
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+
+function RequireAuth({ children }) {
+  const { token } = useAuth();
+  if (!token) {
+    return <Navigate to="/auth/sign-in" replace />;
+  }
+  return children;
+}
+
 export default function Main() {
   // eslint-disable-next-line
   const [currentTheme, setCurrentTheme] = useState(initialTheme);
   return (
     <ChakraProvider theme={currentTheme}>
-      <Routes>
-        <Route path="auth/*" element={<AuthLayout />} />
-        <Route
-          path="admin/*"
-          element={
-            <AdminLayout theme={currentTheme} setTheme={setCurrentTheme} />
-          }
-        />
-        <Route
-          path="rtl/*"
-          element={
-            <RTLLayout theme={currentTheme} setTheme={setCurrentTheme} />
-          }
-        />
-        <Route path="/" element={<Navigate to="/admin" replace />} />
-      </Routes>
+      <AuthProvider>
+        <Routes>
+          <Route path="auth/*" element={<AuthLayout />} />
+          <Route
+            path="admin/*"
+            element={
+              <RequireAuth>
+                <AdminLayout theme={currentTheme} setTheme={setCurrentTheme} />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="rtl/*"
+            element={
+              <RTLLayout theme={currentTheme} setTheme={setCurrentTheme} />
+            }
+          />
+          <Route path="/" element={<Navigate to="/admin" replace />} />
+        </Routes>
+      </AuthProvider>
     </ChakraProvider>
   );
 }

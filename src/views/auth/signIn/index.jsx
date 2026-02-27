@@ -1,28 +1,7 @@
-/* eslint-disable */
-/*!
-  _   _  ___  ____  ___ ________  _   _   _   _ ___   
- | | | |/ _ \|  _ \|_ _|__  / _ \| \ | | | | | |_ _| 
- | |_| | | | | |_) || |  / / | | |  \| | | | | || | 
- |  _  | |_| |  _ < | | / /| |_| | |\  | | |_| || |
- |_| |_|\___/|_| \_\___/____\___/|_| \_|  \___/|___|
-                                                                                                                                                                                                                                                                                                                                       
-=========================================================
-* Horizon UI - v1.1.0
-=========================================================
-
-* Product Page: https://www.horizon-ui.com/
-* Copyright 2023 Horizon UI (https://www.horizon-ui.com/)
-
-* Designed and Coded by Simmmple
-
-=========================================================
-
-* The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-
-*/
 
 import React from "react";
 import { NavLink } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 // Chakra imports
 import {
   Box,
@@ -37,16 +16,20 @@ import {
   InputGroup,
   InputRightElement,
   Text,
+  Alert,
+  AlertIcon,
   useColorModeValue,
 } from "@chakra-ui/react";
 // Custom components
-import { HSeparator } from "components/separator/Separator";
+//import { HSeparator } from "components/separator/Separator";
 import DefaultAuth from "layouts/auth/Default";
 // Assets
 import illustration from "assets/img/auth/auth.png";
-import { FcGoogle } from "react-icons/fc";
+//import { FcGoogle } from "react-icons/fc";
 import { MdOutlineRemoveRedEye } from "react-icons/md";
 import { RiEyeCloseLine } from "react-icons/ri";
+
+import { useAuth } from "contexts/AuthContext";
 
 function SignIn() {
   // Chakra color mode
@@ -55,18 +38,70 @@ function SignIn() {
   const textColorDetails = useColorModeValue("navy.700", "secondaryGray.600");
   const textColorBrand = useColorModeValue("brand.500", "white");
   const brandStars = useColorModeValue("brand.500", "brand.400");
-  const googleBg = useColorModeValue("secondaryGray.300", "whiteAlpha.200");
-  const googleText = useColorModeValue("navy.700", "white");
-  const googleHover = useColorModeValue(
-    { bg: "gray.200" },
-    { bg: "whiteAlpha.300" }
+  const cardBg = useColorModeValue("white", "navy.800");
+  const cardShadow = useColorModeValue(
+    "0px 18px 40px rgba(112, 144, 176, 0.12)",
+    "none"
   );
-  const googleActive = useColorModeValue(
-    { bg: "secondaryGray.300" },
-    { bg: "whiteAlpha.200" }
-  );
+  // const googleBg = useColorModeValue("secondaryGray.300", "whiteAlpha.200");
+  // const googleText = useColorModeValue("navy.700", "white");
+  // const googleHover = useColorModeValue(
+  //   { bg: "gray.200" },
+  //   { bg: "whiteAlpha.300" }
+  // );
+  // const googleActive = useColorModeValue(
+  //   { bg: "secondaryGray.300" },
+  //   { bg: "whiteAlpha.200" }
+  // );
+  const navigate = useNavigate();
+  const { login } = useAuth();
   const [show, setShow] = React.useState(false);
+  const [email, setEmail] = React.useState("");
+  const [password, setPassword] = React.useState("");
+  const [rememberMe, setRememberMe] = React.useState(false);
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [errorMessage, setErrorMessage] = React.useState("");
   const handleClick = () => setShow(!show);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setErrorMessage("");
+    setIsSubmitting(true);
+
+    try {
+      const apiBaseUrl =
+        process.env.REACT_APP_API_BASE_URL || "http://localhost:8002";
+      const res = await fetch(`${apiBaseUrl}/api/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email,
+          password,
+        }),
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        setErrorMessage(data?.message || "Login failed");
+        return;
+      }
+
+      login({
+        token: data?.token || "",
+        user: data?.user || null,
+        rememberMe,
+      });
+
+      navigate("/admin/default", { replace: true });
+    } catch (err) {
+      setErrorMessage("Unable to login. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
   return (
     <DefaultAuth illustrationBackground={illustration} image={illustration}>
       <Flex
@@ -75,7 +110,7 @@ function SignIn() {
         mx={{ base: "auto", lg: "0px" }}
         me='auto'
         h='100%'
-        alignItems='start'
+        alignItems='center'
         justifyContent='center'
         mb={{ base: "30px", md: "60px" }}
         px={{ base: "25px", md: "0px" }}
@@ -99,12 +134,14 @@ function SignIn() {
           direction='column'
           w={{ base: "100%", md: "420px" }}
           maxW='100%'
-          background='transparent'
+          background={cardBg}
           borderRadius='15px'
+          boxShadow={cardShadow}
+          p={{ base: "24px", md: "32px" }}
           mx={{ base: "auto", lg: "unset" }}
           me='auto'
           mb={{ base: "20px", md: "auto" }}>
-          <Button
+          {/* <Button
             fontSize='sm'
             me='0px'
             mb='26px'
@@ -119,15 +156,21 @@ function SignIn() {
             _focus={googleActive}>
             <Icon as={FcGoogle} w='20px' h='20px' me='10px' />
             Sign in with Google
-          </Button>
-          <Flex align='center' mb='25px'>
+          </Button> */}
+          {/* <Flex align='center' mb='25px'>
             <HSeparator />
             <Text color='gray.400' mx='14px'>
               or
             </Text>
             <HSeparator />
-          </Flex>
-          <FormControl>
+          </Flex> */}
+          <FormControl as='form' onSubmit={handleSubmit}>
+            {errorMessage ? (
+              <Alert status='error' mb='24px' borderRadius='12px'>
+                <AlertIcon />
+                {errorMessage}
+              </Alert>
+            ) : null}
             <FormLabel
               display='flex'
               ms='4px'
@@ -147,6 +190,8 @@ function SignIn() {
               mb='24px'
               fontWeight='500'
               size='lg'
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
             />
             <FormLabel
               ms='4px'
@@ -165,6 +210,8 @@ function SignIn() {
                 size='lg'
                 type={show ? "text" : "password"}
                 variant='auth'
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
               />
               <InputRightElement display='flex' alignItems='center' mt='4px'>
                 <Icon
@@ -181,6 +228,8 @@ function SignIn() {
                   id='remember-login'
                   colorScheme='brandScheme'
                   me='10px'
+                  isChecked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
                 />
                 <FormLabel
                   htmlFor='remember-login'
@@ -207,7 +256,10 @@ function SignIn() {
               fontWeight='500'
               w='100%'
               h='50'
-              mb='24px'>
+              mb='16px'
+              type='submit'
+              isLoading={isSubmitting}
+              loadingText='Signing In'>
               Sign In
             </Button>
           </FormControl>
