@@ -1,23 +1,20 @@
 import React from 'react';
 
 import { Icon } from '@chakra-ui/react';
-import {
-  //MdBarChart,
+import { 
   MdPerson,
   MdPeople,
   MdHome,
-  MdSecurity,
-  MdLock,
   MdEventAvailable,
   MdSchedule,
   MdWork,
   MdCalendarToday,
-  //MdOutlineShoppingCart,
+  MdLock,
+  MdSecurity,
 } from 'react-icons/md';
 
 // Admin Imports
 import MainDashboard from 'views/admin/default';
-//import NFTMarketplace from 'views/admin/marketplace';
 import Profile from 'views/admin/profile';
 import UsersAdmin from 'views/admin/users';
 import AccessControlAdmin from 'views/admin/accessControl';
@@ -25,7 +22,6 @@ import AppointmentsAdmin from 'views/admin/appointments';
 import DoctorSchedule from 'views/admin/schedule';
 import EmployeeSchedule from 'views/admin/employeeSchedule';
 import MyAppointments from 'views/admin/myAppointments';
-//import DataTables from 'views/admin/dataTables';
 import RTL from 'views/admin/rtl';
 
 // Auth Imports
