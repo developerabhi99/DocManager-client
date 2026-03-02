@@ -9,6 +9,9 @@ import {
   MdSecurity,
   MdLock,
   MdEventAvailable,
+  MdSchedule,
+  MdWork,
+  MdCalendarToday,
   //MdOutlineShoppingCart,
 } from 'react-icons/md';
 
@@ -19,6 +22,9 @@ import Profile from 'views/admin/profile';
 import UsersAdmin from 'views/admin/users';
 import AccessControlAdmin from 'views/admin/accessControl';
 import AppointmentsAdmin from 'views/admin/appointments';
+import DoctorSchedule from 'views/admin/schedule';
+import EmployeeSchedule from 'views/admin/employeeSchedule';
+import MyAppointments from 'views/admin/myAppointments';
 //import DataTables from 'views/admin/dataTables';
 import RTL from 'views/admin/rtl';
 
@@ -82,6 +88,27 @@ const routes = [
     path: '/appointments',
     icon: <Icon as={MdEventAvailable} width="20px" height="20px" color="inherit" />,
     component: <AppointmentsAdmin />,
+  },
+  {
+    name: 'Schedule',
+    layout: '/admin',
+    path: '/schedule',
+    icon: <Icon as={MdSchedule} width="20px" height="20px" color="inherit" />,
+    component: <DoctorSchedule />,
+  },
+  {
+    name: 'Employee Schedule',
+    layout: '/admin',
+    path: '/employee-schedule',
+    icon: <Icon as={MdWork} width="20px" height="20px" color="inherit" />,
+    component: <EmployeeSchedule />,
+  },
+  {
+    name: 'My Appointments',
+    layout: '/admin',
+    path: '/my-appointments',
+    icon: <Icon as={MdCalendarToday} width="20px" height="20px" color="inherit" />,
+    component: <MyAppointments />,
   },
   {
     name: 'Sign In',
