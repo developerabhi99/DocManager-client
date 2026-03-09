@@ -71,9 +71,12 @@ export default function AppointmentsAdmin() {
     prescription: '', 
     reportFile: null,
     shouldRefer: false,
+    referralDepartment: '',
     referralTarget: '',
     referralNotes: ''
   });
+  const [departments, setDepartments] = useState([]);
+  const [users, setUsers] = useState([]);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
   const [referralForm, setReferralForm] = useState({ referredTo: '', notes: '' });
@@ -194,9 +197,21 @@ export default function AppointmentsAdmin() {
     setUploadProgress(0);
 
     try {
+      // Create FormData for medical report with file upload
       const formData = new FormData();
       formData.append('file', file);
       formData.append('appointmentId', selectedAppointment.id);
+      formData.append('diagnosis', completionForm.diagnosis || '');
+      formData.append('symptoms', completionForm.symptoms || '');
+      formData.append('treatment', completionForm.treatment || '');
+      formData.append('prescription', completionForm.prescription || '');
+      formData.append('notes', completionForm.notes || '');
+      formData.append('uploadedBy', user.id);
+      formData.append('uploadType', 'medical_report');
+      formData.append('fileName', file.name);
+      formData.append('fileSize', file.size);
+      formData.append('fileType', file.type);
+      formData.append('uploadTimestamp', new Date().toISOString());
 
       const xhr = new XMLHttpRequest();
       
@@ -213,9 +228,9 @@ export default function AppointmentsAdmin() {
         if (xhr.status === 200) {
           const response = JSON.parse(xhr.responseText);
           setCompletionForm({ ...completionForm, reportFile: response.fileUrl });
-          toast({ title: 'File uploaded successfully', status: 'success' });
+          toast({ title: 'Medical report created successfully', status: 'success' });
         } else {
-          toast({ title: 'File upload failed', status: 'error' });
+          toast({ title: 'Failed to create medical report', status: 'error' });
         }
         setIsUploading(false);
         setUploadProgress(0);
@@ -223,18 +238,18 @@ export default function AppointmentsAdmin() {
 
       // Handle error
       xhr.addEventListener('error', () => {
-        toast({ title: 'File upload failed', status: 'error' });
+        toast({ title: 'Failed to create medical report', status: 'error' });
         setIsUploading(false);
         setUploadProgress(0);
       });
 
-      // Send request
-      xhr.open('POST', `${API_BASE}/admin/upload-report`);
+      // Send request to medical reports endpoint with file upload
+      xhr.open('POST', `${API_BASE}/medical-reports`);
       xhr.setRequestHeader('Authorization', `Bearer ${token}`);
       xhr.send(formData);
 
     } catch (error) {
-      toast({ title: 'File upload failed', status: 'error' });
+      toast({ title: 'Failed to create medical report', status: 'error' });
       setIsUploading(false);
       setUploadProgress(0);
     }
@@ -298,33 +313,97 @@ export default function AppointmentsAdmin() {
     }
   }, [token, toast]);
 
+  const fetchDepartments = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/admin/departments`, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await res.json();
+      console.log('Departments data:', data);
+      if (res.ok) setDepartments(data);
+      else toast({ title: 'Failed to fetch departments', status: 'error' });
+    } catch (err) {
+      toast({ title: 'Error fetching departments', status: 'error' });
+    }
+  }, [token, toast]);
+
+  const fetchUsers = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/admin/users`, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await res.json();
+      if (res.ok) setUsers(data.users || []);
+      else toast({ title: 'Failed to fetch users', status: 'error' });
+    } catch (err) {
+      toast({ title: 'Error fetching users', status: 'error' });
+    }
+  }, [token, toast]);
+
   const fetchAvailableSlots = useCallback(async (doctorId, date) => {
+    console.log('🔍 fetchAvailableSlots called with:', { doctorId, date });
+    
     if (!doctorId || !date) {
+      console.log('❌ Missing doctorId or date');
       setAvailableSlots([]);
       return;
     }
 
     setIsLoadingSlots(true);
+    
     try {
-      const res = await fetch(`${API_BASE}/doctors/${doctorId}/availability?date=${date}`, {
+      const apiUrl = `${API_BASE}/doctors/${doctorId}/availability?date=${date}`;
+      console.log('📡 Fetching from URL:', apiUrl);
+      
+      const res = await fetch(apiUrl, {
         headers: { Authorization: `Bearer ${token}` }
       });
+      
+      console.log('📊 Response status:', res.status);
+      console.log('📊 Response ok:', res.ok);
+      
       const data = await res.json();
+      console.log('📦 Full API response:', data);
+      console.log('📦 Response type:', typeof data);
+      console.log('📦 Response keys:', Object.keys(data));
+      
       if (res.ok) {
-        console.log('Available slots received:', data.availableSlots);
+        // Handle different possible response structures
+        let slots = [];
+        
+        if (data.availableSlots) {
+          console.log('✅ Found data.availableSlots:', data.availableSlots);
+          slots = data.availableSlots;
+        } else if (data.slots) {
+          console.log('✅ Found data.slots:', data.slots);
+          slots = data.slots;
+        } else if (Array.isArray(data)) {
+          console.log('✅ Found direct array:', data);
+          slots = data;
+        } else {
+          console.log('❌ No expected slot structure found in response');
+        }
+        
+        console.log('🔢 Total slots before filtering:', slots.length);
+        
         // Filter out past slots on client side
-        const filteredSlots = data.availableSlots.filter(slot => new Date(slot.startTime) > new Date());
-        console.log('Filtered slots:', filteredSlots);
+        const filteredSlots = slots.filter(slot => {
+          const slotTime = new Date(slot.startTime || slot);
+          const isFuture = slotTime > new Date();
+          console.log(`⏰ Slot ${slot.startTime || slot} is future: ${isFuture}`);
+          return isFuture;
+        });
+        
+        console.log('✅ Final filtered slots:', filteredSlots);
         setAvailableSlots(filteredSlots);
       } else {
+        console.log('❌ API response not ok, setting empty slots');
         setAvailableSlots([]);
         toast({ title: 'Failed to fetch availability', status: 'error' });
       }
     } catch (err) {
+      console.log('💥 Error in fetchAvailableSlots:', err);
       setAvailableSlots([]);
       toast({ title: 'Error fetching availability', status: 'error' });
     } finally {
       setIsLoadingSlots(false);
+      console.log('🏁 fetchAvailableSlots completed, loading set to false');
     }
   }, [token, toast]);
 
@@ -460,20 +539,20 @@ export default function AppointmentsAdmin() {
   };
 
   const submitCompletion = async () => {
-    if (!completionForm.notes || !completionForm.diagnosis || !completionForm.reportFile) {
-      toast({ title: 'Notes, diagnosis, and report file are required', status: 'error' });
+    if (!completionForm.notes || !completionForm.diagnosis) {
+      toast({ title: 'Notes and diagnosis are required', status: 'error' });
       return;
     }
 
     try {
-      // First complete the appointment
+      // Complete the appointment with optional file URL
       const completionPayload = {
         notes: completionForm.notes,
         diagnosis: completionForm.diagnosis,
         symptoms: completionForm.symptoms,
         treatment: completionForm.treatment,
         prescription: completionForm.prescription,
-        reportUrl: completionForm.reportFile
+        ...(completionForm.reportFile && { reportUrl: completionForm.reportFile })
       };
 
       const completionRes = await fetch(`${API_BASE}/appointments/${selectedAppointment.id}/complete`, {
@@ -532,6 +611,7 @@ export default function AppointmentsAdmin() {
         prescription: '', 
         reportFile: null,
         shouldRefer: false,
+        referralDepartment: '',
         referralTarget: '',
         referralNotes: ''
       });
@@ -553,11 +633,12 @@ export default function AppointmentsAdmin() {
     fetchPatients();
     fetchDoctors();
     fetchAppointments();
+    fetchUsers();
     fetchTransactions();
-    if (user.role === 'SUPER_ADMIN') {
+    if (user.role === 'DOCTOR') {
       fetchDoctorsAndPatients();
     }
-  }, [fetchPatients, fetchDoctors, fetchAppointments, fetchTransactions, fetchDoctorsAndPatients, user.role]);
+  }, [fetchPatients, fetchDoctors, fetchAppointments, fetchUsers, fetchTransactions, fetchDoctorsAndPatients, user.role]);
 
   useEffect(() => {
     if (transactionPage > 1) {
@@ -756,6 +837,7 @@ export default function AppointmentsAdmin() {
                     placeholder="Select time slot"
                     isDisabled={!appointmentForm.doctorId || !appointmentForm.selectedDate || isLoadingSlots}
                   >
+                    
                     {availableSlots.map((slot) => (
                       <option key={slot.id} value={slot.startTime}>
                         {new Date(slot.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -1317,8 +1399,7 @@ export default function AppointmentsAdmin() {
                 </Text>
               </Box>
 
-             
-
+              
               {/* Completion Fields */}
               <Box>
                 <Text fontSize="md" fontWeight="bold" mb={3}>Completion Details</Text>
@@ -1363,8 +1444,8 @@ export default function AppointmentsAdmin() {
                       placeholder="Enter prescription (optional)"
                     />
                   </FormControl>
-                  <FormControl isRequired>
-                    <FormLabel>Report File *</FormLabel>
+                  <FormControl>
+                    <FormLabel>Report File</FormLabel>
                     <VStack spacing={3} align="stretch">
                       <Input
                         type="file"
@@ -1372,6 +1453,34 @@ export default function AppointmentsAdmin() {
                         onChange={(e) => {
                           const file = e.target.files[0];
                           if (file) {
+                            // Validate file type
+                            const allowedExtensions = ['.pdf', '.jpg', '.jpeg', '.png', '.doc', '.docx'];
+                            
+                            // Check file extension
+                            const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
+                            const isValidExtension = allowedExtensions.includes(fileExtension);
+                            
+                            // Check file size (10MB = 10 * 1024 * 1024 bytes)
+                            const isValidSize = file.size <= 10 * 1024 * 1024;
+                            
+                            if (!isValidExtension) {
+                              toast({ 
+                                title: 'Invalid file format', 
+                                description: 'Accepted formats: PDF, JPG, PNG, DOC, DOCX (Max: 10MB)', 
+                                status: 'error' 
+                              });
+                              return;
+                            }
+                            
+                            if (!isValidSize) {
+                              toast({ 
+                                title: 'File too large', 
+                                description: 'Maximum file size is 10MB', 
+                                status: 'error' 
+                              });
+                              return;
+                            }
+                            
                             handleFileUpload(file);
                           }
                         }}
@@ -1400,22 +1509,48 @@ export default function AppointmentsAdmin() {
                       
                       {completionForm.reportFile && (
                         <Box p={3} bg="green.50" borderRadius="md" border="1px solid" borderColor="green.200">
-                          <HStack justify="space-between">
-                            <Text fontSize="sm" color="green.800">
-                              ✓ File uploaded successfully
-                            </Text>
-                            <Button
-                              size="xs"
-                              colorScheme="red"
-                              variant="ghost"
-                              onClick={() => {
-                                setCompletionForm({ ...completionForm, reportFile: null });
-                                setUploadProgress(0);
-                              }}
-                            >
-                              Remove
-                            </Button>
-                          </HStack>
+                          <VStack spacing={2} align="stretch">
+                            <HStack justify="space-between">
+                              <VStack align="start" spacing={1}>
+                                <Text fontSize="sm" color="green.800" fontWeight="medium">
+                                  ✓ File uploaded successfully
+                                </Text>
+                                {typeof completionForm.reportFile === 'string' ? (
+                                  <Text fontSize="xs" color="gray.600">
+                                    {completionForm.reportFile.split('/').pop()} {/* Extract filename from URL */}
+                                  </Text>
+                                ) : (
+                                  <Text fontSize="xs" color="gray.600">
+                                    {completionForm.reportFile?.name || 'Uploaded file'}
+                                  </Text>
+                                )}
+                              </VStack>
+                              <Button
+                                size="xs"
+                                colorScheme="red"
+                                variant="ghost"
+                                onClick={() => {
+                                  setCompletionForm({ ...completionForm, reportFile: null });
+                                  setUploadProgress(0);
+                                }}
+                              >
+                                Remove
+                              </Button>
+                            </HStack>
+                            {typeof completionForm.reportFile === 'string' && (
+                              <Button
+                                size="xs"
+                                colorScheme="blue"
+                                variant="outline"
+                                onClick={() => {
+                                  // Open file in new tab
+                                  window.open(`${API_BASE}${completionForm.reportFile}`, '_blank');
+                                }}
+                              >
+                                View File
+                              </Button>
+                            )}
+                          </VStack>
                         </Box>
                       )}
                       
@@ -1426,7 +1561,7 @@ export default function AppointmentsAdmin() {
                   </FormControl>
                 </VStack>
               </Box>
-               {/* Action Selection */}
+              {/* Action Selection */}
               <Box>
                 <Text fontSize="md" fontWeight="bold" mb={3}>Action Selection</Text>
                 <HStack spacing={4}>
@@ -1440,29 +1575,80 @@ export default function AppointmentsAdmin() {
                   <Button 
                     colorScheme={completionForm.shouldRefer ? "purple" : "gray"}
                     variant={completionForm.shouldRefer ? "solid" : "outline"}
-                    onClick={() => setCompletionForm({ ...completionForm, shouldRefer: true })}
+                    onClick={async () => {
+                      setCompletionForm({ ...completionForm, shouldRefer: true });
+                      await fetchDepartments();
+                    }}
                   >
                     Complete & Refer
                   </Button>
                 </HStack>
               </Box>
 
+
               {/* Divider */}
               <Box border="1px solid" borderColor="gray.200" />
 
               {/* Referral Fields */}
+              {completionForm.shouldRefer && (
               <Box>
                 <Text fontSize="md" fontWeight="bold" mb={3}>Referral Information</Text>
                 <VStack spacing={4}>
                   <FormControl isRequired>
-                    <FormLabel>Referral Target *</FormLabel>
-                    <Input
-                      value={completionForm.referralTarget}
-                      onChange={(e) => setCompletionForm({ ...completionForm, referralTarget: e.target.value })}
-                      placeholder="Enter doctor ID or department name"
+                    <FormLabel>Department *</FormLabel>
+                    <Select
+                      value={completionForm.referralDepartment}
+                      onChange={(e) => setCompletionForm({ ...completionForm, referralDepartment: e.target.value, referralTarget: '' })}
+                      placeholder="Select department"
                       isDisabled={!completionForm.shouldRefer}
                       bg={!completionForm.shouldRefer ? "gray.100" : "white"}
-                    />
+                    >
+                      {departments.map(dept => (
+                        <option key={dept.id} value={dept.id}>
+                          {dept.name} (ID: {dept.id})
+                        </option>
+                      ))}
+                    </Select>
+                  </FormControl>
+                  <FormControl isRequired>
+                    <FormLabel>Referral Target *</FormLabel>
+                    <Select
+                      value={completionForm.referralTarget}
+                      onChange={(e) => setCompletionForm({ ...completionForm, referralTarget: e.target.value })}
+                      placeholder="Select employee"
+                      isDisabled={!completionForm.shouldRefer || !completionForm.referralDepartment}
+                      bg={!completionForm.shouldRefer || !completionForm.referralDepartment ? "gray.100" : "white"}
+                    >
+                      {/* Show users from the selected department */}
+                      {completionForm.referralDepartment && (() => {
+                        console.log('Selected department ID:', completionForm.referralDepartment);
+                        console.log('Departments data:', departments);
+                        
+                        const selectedDepartment = departments.find(dept => dept.id === completionForm.referralDepartment);
+                        console.log('Selected department object:', selectedDepartment);
+                        
+                        const departmentUsers = selectedDepartment?.users || [];
+                        console.log('Department users:', departmentUsers);
+                        
+                        return departmentUsers;
+                      })().map(user => (
+                        <option key={user.id} value={user.id}>{user.name}</option>
+                      ))}
+                      
+                      {/* Fallback: Show all users if no department users found */}
+                      {completionForm.referralDepartment && (() => {
+                        const selectedDepartment = departments.find(dept => dept.id === completionForm.referralDepartment);
+                        const departmentUsers = selectedDepartment?.users || [];
+                        
+                        if (departmentUsers.length === 0) {
+                          console.log('No users found in department, showing all users as fallback');
+                          return users;
+                        }
+                        return [];
+                      })().map(user => (
+                        <option key={user.id} value={user.id}>{user.name} (All Users)</option>
+                      ))}
+                    </Select>
                   </FormControl>
                   <FormControl isRequired>
                     <FormLabel>Referral Notes *</FormLabel>
@@ -1476,6 +1662,7 @@ export default function AppointmentsAdmin() {
                   </FormControl>
                 </VStack>
               </Box>
+              )}
             </VStack>
           </ModalBody>
           <ModalFooter>
@@ -1485,7 +1672,7 @@ export default function AppointmentsAdmin() {
             <Button 
               colorScheme={completionForm.shouldRefer ? "purple" : "green"} 
               onClick={completionForm.shouldRefer ? submitReferral : submitCompletion}
-              isDisabled={!completionForm.notes || !completionForm.diagnosis || !completionForm.reportFile || (completionForm.shouldRefer && (!completionForm.referralTarget || !completionForm.referralNotes)) || isUploading}
+              isDisabled={!completionForm.notes || !completionForm.diagnosis || (completionForm.shouldRefer && (!completionForm.referralTarget || !completionForm.referralNotes)) || isUploading}
             >
               {completionForm.shouldRefer ? 'Complete & Refer Appointment' : 'Complete Appointment'}
             </Button>

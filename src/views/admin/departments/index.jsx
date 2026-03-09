@@ -38,16 +38,17 @@ import {
   Text,
   useColorModeValue,
 } from '@chakra-ui/react';
-import { DeleteIcon, EditIcon, AddIcon } from '@chakra-ui/icons';
+import { DeleteIcon, EditIcon, AddIcon, RepeatIcon } from '@chakra-ui/icons';
 import { useAuth } from '../../../contexts/AuthContext';
 
 const API_BASE = 'http://localhost:8002/api';
 
 const Departments = () => {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const [departments, setDepartments] = useState([]);
   const [unassignedEmployees, setUnassignedEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState(null);
   const [editingDepartment, setEditingDepartment] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
@@ -68,12 +69,13 @@ const Departments = () => {
     try {
       const response = await fetch(`${API_BASE}/admin/departments`, {
         headers: {
-          'Authorization': `Bearer ${user?.token}`,
+          'Authorization': `Bearer ${token}`,
         },
       });
       if (response.ok) {
         const data = await response.json();
         setDepartments(data);
+        setLastUpdated(new Date());
       } else {
         toast({
           title: 'Error fetching departments',
@@ -95,13 +97,13 @@ const Departments = () => {
     } finally {
       setLoading(false);
     }
-  }, [user?.token, toast]);
+  }, [token, toast]);
 
   const fetchUnassignedEmployees = useCallback(async () => {
     try {
       const response = await fetch(`${API_BASE}/admin/employees/without-department`, {
         headers: {
-          'Authorization': `Bearer ${user?.token}`,
+          'Authorization': `Bearer ${token}`,
         },
       });
       if (response.ok) {
@@ -111,11 +113,24 @@ const Departments = () => {
     } catch (error) {
       console.error('Error fetching unassigned employees:', error);
     }
-  }, [user?.token]);
+  }, [token]);
 
   useEffect(() => {
     fetchDepartments();
     fetchUnassignedEmployees();
+  }, [fetchDepartments, fetchUnassignedEmployees]);
+
+  // Auto-refresh when window gains focus (user switches back to this tab)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        fetchDepartments();
+        fetchUnassignedEmployees();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [fetchDepartments, fetchUnassignedEmployees]);
 
   const handleSubmit = async (e) => {
@@ -132,7 +147,7 @@ const Departments = () => {
         method,
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${user?.token}`,
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify(formData),
       });
@@ -178,7 +193,7 @@ const Departments = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${user?.token}`,
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify(assignFormData),
       });
@@ -230,7 +245,7 @@ const Departments = () => {
       const response = await fetch(`${API_BASE}/admin/departments/${departmentId}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${user?.token}`,
+          'Authorization': `Bearer ${token}`,
         },
       });
 
@@ -270,7 +285,7 @@ const Departments = () => {
       const response = await fetch(`${API_BASE}/admin/departments/remove-employee/${userId}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${user?.token}`,
+          'Authorization': `Bearer ${token}`,
         },
       });
 
@@ -313,21 +328,41 @@ const Departments = () => {
   const borderColor = useColorModeValue('gray.200', 'gray.600');
 
   return (
-    <Box p={8}>
+    <Box p={8} pt="80px">
       <VStack spacing={6} align="stretch">
         <HStack justify="space-between" align="center">
-          <Heading>Department Management</Heading>
-          <Button
-            leftIcon={<AddIcon />}
-            colorScheme="blue"
-            onClick={() => {
-              setEditingDepartment(null);
-              setFormData({ name: '', description: '' });
-              onModalOpen();
-            }}
-          >
-            Add Department
-          </Button>
+          <VStack align="start" spacing={1}>
+            <Heading>Department Management</Heading>
+            {lastUpdated && (
+              <Text fontSize="sm" color="gray.500">
+                Last updated: {lastUpdated.toLocaleTimeString()}
+              </Text>
+            )}
+          </VStack>
+          <HStack>
+            <Button
+              leftIcon={<RepeatIcon />}
+              variant="outline"
+              onClick={() => {
+                fetchDepartments();
+                fetchUnassignedEmployees();
+              }}
+              isLoading={loading}
+            >
+              Refresh
+            </Button>
+            <Button
+              leftIcon={<AddIcon />}
+              colorScheme="blue"
+              onClick={() => {
+                setEditingDepartment(null);
+                setFormData({ name: '', description: '' });
+                onModalOpen();
+              }}
+            >
+              Add Department
+            </Button>
+          </HStack>
         </HStack>
 
         {loading ? (
