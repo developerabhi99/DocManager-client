@@ -1317,26 +1317,7 @@ export default function AppointmentsAdmin() {
                 </Text>
               </Box>
 
-              {/* Action Selection */}
-              <Box>
-                <Text fontSize="md" fontWeight="bold" mb={3}>Action Selection</Text>
-                <HStack spacing={4}>
-                  <Button 
-                    colorScheme={completionForm.shouldRefer ? "gray" : "green"}
-                    variant={completionForm.shouldRefer ? "outline" : "solid"}
-                    onClick={() => setCompletionForm({ ...completionForm, shouldRefer: false })}
-                  >
-                    Complete Only
-                  </Button>
-                  <Button 
-                    colorScheme={completionForm.shouldRefer ? "purple" : "gray"}
-                    variant={completionForm.shouldRefer ? "solid" : "outline"}
-                    onClick={() => setCompletionForm({ ...completionForm, shouldRefer: true })}
-                  >
-                    Complete & Refer
-                  </Button>
-                </HStack>
-              </Box>
+             
 
               {/* Completion Fields */}
               <Box>
@@ -1444,6 +1425,26 @@ export default function AppointmentsAdmin() {
                     </VStack>
                   </FormControl>
                 </VStack>
+              </Box>
+               {/* Action Selection */}
+              <Box>
+                <Text fontSize="md" fontWeight="bold" mb={3}>Action Selection</Text>
+                <HStack spacing={4}>
+                  <Button 
+                    colorScheme={completionForm.shouldRefer ? "gray" : "green"}
+                    variant={completionForm.shouldRefer ? "outline" : "solid"}
+                    onClick={() => setCompletionForm({ ...completionForm, shouldRefer: false })}
+                  >
+                    Complete Only
+                  </Button>
+                  <Button 
+                    colorScheme={completionForm.shouldRefer ? "purple" : "gray"}
+                    variant={completionForm.shouldRefer ? "solid" : "outline"}
+                    onClick={() => setCompletionForm({ ...completionForm, shouldRefer: true })}
+                  >
+                    Complete & Refer
+                  </Button>
+                </HStack>
               </Box>
 
               {/* Divider */}

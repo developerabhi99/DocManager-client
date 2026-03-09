@@ -11,6 +11,7 @@ import {
   MdCalendarToday,
   MdLock,
   MdSecurity,
+  MdBusiness,
 } from 'react-icons/md';
 
 // Admin Imports
@@ -21,6 +22,7 @@ import AccessControlAdmin from 'views/admin/accessControl';
 import AppointmentsAdmin from 'views/admin/appointments';
 import DoctorSchedule from 'views/admin/schedule';
 import EmployeeSchedule from 'views/admin/employeeSchedule';
+import Departments from 'views/admin/departments';
 import MyAppointments from 'views/admin/myAppointments';
 import RTL from 'views/admin/rtl';
 
@@ -98,6 +100,13 @@ const routes = [
     path: '/employee-schedule',
     icon: <Icon as={MdWork} width="20px" height="20px" color="inherit" />,
     component: <EmployeeSchedule />,
+  },
+  {
+    name: 'Departments',
+    layout: '/admin',
+    path: '/departments',
+    icon: <Icon as={MdBusiness} width="20px" height="20px" color="inherit" />,
+    component: <Departments />,
   },
   {
     name: 'My Appointments',
