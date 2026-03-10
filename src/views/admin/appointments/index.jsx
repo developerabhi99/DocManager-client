@@ -5,32 +5,33 @@ import {
   FormControl,
   FormLabel,
   Input,
+  Modal,
+  ModalBody,
+  ModalCloseButton,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
+  ModalOverlay,
   Select,
+  Text,
   Textarea,
+  useToast,
+  VStack,
+  HStack,
+  Badge,
+  Spinner,
+  Progress,
   Grid,
   Card,
   CardHeader,
   CardBody,
   Heading,
-  useToast,
   Table,
   Thead,
   Tbody,
   Tr,
   Th,
-  Td,
-  Badge,
-  VStack,
-  HStack,
-  Text,
-  Modal,
-  ModalOverlay,
-  ModalContent,
-  ModalHeader,
-  ModalFooter,
-  ModalBody,
-  ModalCloseButton,
-  Progress,
+  Td
 } from '@chakra-ui/react';
 import { useAuth } from '../../../contexts/AuthContext';
 
@@ -58,7 +59,9 @@ export default function AppointmentsAdmin() {
   // Modal states
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isCompletionModalOpen, setIsCompletionModalOpen] = useState(false);
-  const [isReferralModalOpen, setIsReferralModalOpen] = useState(false);
+  const [isViewDetailsModalOpen, setIsViewDetailsModalOpen] = useState(false);
+  const [appointmentDetails, setAppointmentDetails] = useState(null);
+  const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState(null);
 
   // Form states for modals
@@ -79,7 +82,6 @@ export default function AppointmentsAdmin() {
   const [users, setUsers] = useState([]);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
-  const [referralForm, setReferralForm] = useState({ referredTo: '', notes: '' });
   const [refundForm, setRefundForm] = useState({ reason: '', amount: '' });
   const [selectedTransaction, setSelectedTransaction] = useState(null);
 
@@ -471,18 +473,33 @@ export default function AppointmentsAdmin() {
     setIsCompletionModalOpen(true);
   };
 
-  const handleReferAppointment = async (appointment) => {
+  const handleViewDetails = async (appointment) => {
     setSelectedAppointment(appointment);
-    setReferralForm({ referredTo: '', notes: '' });
-    setIsReferralModalOpen(true);
-  };
-
-  const handleViewDetails = (appointment) => {
-    toast({ 
-      title: 'Appointment Details', 
-      description: `Patient: ${appointment.patient?.name}, Doctor: ${appointment.doctor?.name}, Status: ${appointment.status}`,
-      status: 'info' 
-    });
+    setIsLoadingDetails(true);
+    
+    try {
+      // Fetch comprehensive appointment details including reports and referral information
+      const response = await fetch(`${API_BASE}/appointments/${appointment.id}/details`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setAppointmentDetails(data);
+      } else {
+        // Fallback to basic appointment data if detailed endpoint fails
+        setAppointmentDetails(appointment);
+      }
+    } catch (error) {
+      console.error('Error fetching appointment details:', error);
+      // Fallback to basic appointment data
+      setAppointmentDetails(appointment);
+    } finally {
+      setIsLoadingDetails(false);
+      setIsViewDetailsModalOpen(true);
+    }
   };
 
   const submitPayment = async () => {
@@ -544,15 +561,26 @@ export default function AppointmentsAdmin() {
       return;
     }
 
+    // Additional validation for referral
+    if (completionForm.shouldRefer && (!completionForm.referralTarget || !completionForm.referralNotes)) {
+      toast({ title: 'Referral target and notes are required when referring', status: 'error' });
+      return;
+    }
+
     try {
-      // Complete the appointment with optional file URL
+      // Prepare the completion payload
       const completionPayload = {
         notes: completionForm.notes,
         diagnosis: completionForm.diagnosis,
         symptoms: completionForm.symptoms,
         treatment: completionForm.treatment,
         prescription: completionForm.prescription,
-        ...(completionForm.reportFile && { reportUrl: completionForm.reportFile })
+        ...(completionForm.reportFile && { reportUrl: completionForm.reportFile }),
+        // Referral information
+        isReferred: completionForm.shouldRefer || false,
+        referredTo: completionForm.shouldRefer ? completionForm.referralTarget : null,
+        referralReason: completionForm.shouldRefer ? completionForm.referralNotes : null,
+        referralNotes: completionForm.shouldRefer ? completionForm.referralNotes : null
       };
 
       const completionRes = await fetch(`${API_BASE}/appointments/${selectedAppointment.id}/complete`, {
@@ -564,45 +592,68 @@ export default function AppointmentsAdmin() {
         body: JSON.stringify(completionPayload),
       });
       
+      const completionData = await completionRes.json();
+      
       if (!completionRes.ok) {
         const err = await completionRes.json();
         toast({ title: 'Failed to complete appointment', description: err.error, status: 'error' });
         return;
       }
 
-      // If referral is also requested, process the referral
+      // If referral was requested, the backend already handled it
       if (completionForm.shouldRefer) {
-        if (!completionForm.referralTarget || !completionForm.referralNotes) {
-          toast({ title: 'Referral target and notes are required when referring', status: 'error' });
-          return;
-        }
-
-        const referralPayload = {
-          referredTo: completionForm.referralTarget,
-          notes: completionForm.referralNotes
-        };
-
-        const referralRes = await fetch(`${API_BASE}/appointments/${selectedAppointment.id}/refer`, {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json', 
-            Authorization: `Bearer ${token}` 
-          },
-          body: JSON.stringify(referralPayload),
-        });
+        toast({ title: 'Appointment completed and referred successfully', status: 'success' });
         
-        if (referralRes.ok) {
-          toast({ title: 'Appointment completed and referred successfully', status: 'success' });
-        } else {
-          const err = await referralRes.json();
-          toast({ title: 'Appointment completed but referral failed', description: err.error, status: 'warning' });
+        // Optionally, you can create the referral appointment immediately
+        if (completionData.medicalReportGroupId) {
+          const referralAppointmentPayload = {
+            patientId: selectedAppointment.patientId,
+            doctorId: completionForm.referralTarget,
+            dateTime: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // Tomorrow
+            notes: `Referral from Dr. ${selectedAppointment.doctor.name}. ${completionForm.referralNotes}`,
+            referredFrom: selectedAppointment.id,
+            medicalReportGroupId: completionData.medicalReportGroupId
+          };
+
+          try {
+            const referralRes = await fetch(`${API_BASE}/appointments/referral`, {
+              method: 'POST',
+              headers: { 
+                'Content-Type': 'application/json', 
+                Authorization: `Bearer ${token}` 
+              },
+              body: JSON.stringify(referralAppointmentPayload),
+            });
+
+            if (referralRes.ok) {
+              const referralData = await referralRes.json();
+              toast({ 
+                title: 'Referral appointment created successfully', 
+                description: `Visit #${referralData.visitNumber} scheduled`, 
+                status: 'success' 
+              });
+            } else {
+              const err = await referralRes.json();
+              toast({ 
+                title: 'Referral appointment creation failed', 
+                description: err.error, 
+                status: 'warning' 
+              });
+            }
+          } catch (error) {
+            toast({ 
+              title: 'Failed to create referral appointment', 
+              description: error.message, 
+              status: 'warning' 
+            });
+          }
         }
       } else {
         toast({ title: 'Appointment completed successfully', status: 'success' });
       }
 
+      // Close modal and reset form
       setIsCompletionModalOpen(false);
-      // Reset form
       setCompletionForm({ 
         notes: '', 
         diagnosis: '', 
@@ -617,9 +668,12 @@ export default function AppointmentsAdmin() {
       });
       setUploadProgress(0);
       setIsUploading(false);
+      
+      // Refresh appointments list
       fetchAppointments();
-    } catch (err) {
-      toast({ title: 'Error completing appointment', status: 'error' });
+    } catch (error) {
+      console.error('Completion error:', error);
+      toast({ title: 'Failed to complete appointment', description: error.message, status: 'error' });
     }
   };
 
@@ -917,16 +971,9 @@ export default function AppointmentsAdmin() {
                             colorScheme="green" 
                             onClick={() => handleCompleteAppointment(appt)}
                           >
-                            Complete
+                            Complete/Refer
                           </Button>
                         )}
-                        <Button 
-                          size="sm" 
-                          colorScheme="purple" 
-                          onClick={() => handleReferAppointment(appt)}
-                        >
-                          Refer
-                        </Button>
                         <Button 
                           size="sm" 
                           colorScheme="blue" 
@@ -1444,52 +1491,56 @@ export default function AppointmentsAdmin() {
                       placeholder="Enter prescription (optional)"
                     />
                   </FormControl>
-                  <FormControl>
-                    <FormLabel>Report File</FormLabel>
-                    <VStack spacing={3} align="stretch">
-                      <Input
-                        type="file"
-                        accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                        onChange={(e) => {
-                          const file = e.target.files[0];
-                          if (file) {
-                            // Validate file type
-                            const allowedExtensions = ['.pdf', '.jpg', '.jpeg', '.png', '.doc', '.docx'];
-                            
-                            // Check file extension
-                            const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
-                            const isValidExtension = allowedExtensions.includes(fileExtension);
-                            
-                            // Check file size (10MB = 10 * 1024 * 1024 bytes)
-                            const isValidSize = file.size <= 10 * 1024 * 1024;
-                            
-                            if (!isValidExtension) {
-                              toast({ 
-                                title: 'Invalid file format', 
-                                description: 'Accepted formats: PDF, JPG, PNG, DOC, DOCX (Max: 10MB)', 
-                                status: 'error' 
-                              });
-                              return;
-                            }
-                            
-                            if (!isValidSize) {
-                              toast({ 
-                                title: 'File too large', 
-                                description: 'Maximum file size is 10MB', 
-                                status: 'error' 
-                              });
-                              return;
-                            }
-                            
-                            handleFileUpload(file);
-                          }
-                        }}
-                        isDisabled={isUploading}
-                        display="none"
-                        id="report-file-upload"
-                      />
-                      <Button
-                        as="label"
+                </VStack>
+              </Box>
+
+              {/* Report File Upload */}
+              <Box>
+                <Text fontSize="md" fontWeight="bold" mb={3}>Report File</Text>
+                <VStack spacing={3} align="stretch">
+                  <Input
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                    onChange={(e) => {
+                      const file = e.target.files[0];
+                      if (file) {
+                        // Validate file type
+                        const allowedExtensions = ['.pdf', '.jpg', '.jpeg', '.png', '.doc', '.docx'];
+                        
+                        // Check file extension
+                        const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
+                        const isValidExtension = allowedExtensions.includes(fileExtension);
+                        
+                        // Check file size (10MB = 10 * 1024 * 1024 bytes)
+                        const isValidSize = file.size <= 10 * 1024 * 1024;
+                        
+                        if (!isValidExtension) {
+                          toast({ 
+                            title: 'Invalid file format', 
+                            description: 'Accepted formats: PDF, JPG, PNG, DOC, DOCX (Max: 10MB)', 
+                            status: 'error' 
+                          });
+                          return;
+                        }
+                        
+                        if (!isValidSize) {
+                          toast({ 
+                            title: 'File too large', 
+                            description: 'Maximum file size is 10MB', 
+                            status: 'error' 
+                          });
+                          return;
+                        }
+                        
+                        handleFileUpload(file);
+                      }
+                    }}
+                    isDisabled={isUploading}
+                    display="none"
+                    id="report-file-upload"
+                  />
+                  <Button
+                    as="label"
                         htmlFor="report-file-upload"
                         colorScheme="blue"
                         variant="outline"
@@ -1558,8 +1609,6 @@ export default function AppointmentsAdmin() {
                         Accepted formats: PDF, JPG, PNG, DOC, DOCX (Max: 10MB)
                       </Text>
                     </VStack>
-                  </FormControl>
-                </VStack>
               </Box>
               {/* Action Selection */}
               <Box>
@@ -1674,52 +1723,308 @@ export default function AppointmentsAdmin() {
               onClick={completionForm.shouldRefer ? submitReferral : submitCompletion}
               isDisabled={!completionForm.notes || !completionForm.diagnosis || (completionForm.shouldRefer && (!completionForm.referralTarget || !completionForm.referralNotes)) || isUploading}
             >
-              {completionForm.shouldRefer ? 'Complete & Refer Appointment' : 'Complete Appointment'}
+              {completionForm.shouldRefer ? 'Refer Appointment' : 'Complete Appointment'}
             </Button>
           </ModalFooter>
         </ModalContent>
       </Modal>
 
-      {/* Referral Modal */}
+      {/* View Details Modal */}
       <Modal 
-        isOpen={isReferralModalOpen} 
-        onClose={() => setIsReferralModalOpen(false)}
+        isOpen={isViewDetailsModalOpen} 
+        onClose={() => setIsViewDetailsModalOpen(false)}
+        size="xl"
       >
         <ModalOverlay />
-        <ModalContent>
-          <ModalHeader>Refer Appointment</ModalHeader>
+        <ModalContent maxW="900px">
+          <ModalHeader>Complete Appointment Details</ModalHeader>
           <ModalCloseButton />
-          <ModalBody>
-            <VStack spacing={4}>
-              <Text>
-                <strong>Patient:</strong> {selectedAppointment?.patient?.name}<br />
-                <strong>Doctor:</strong> {selectedAppointment?.doctor?.name}<br />
-                <strong>Date:</strong> {selectedAppointment ? formatDateTime(selectedAppointment.dateTime) : ''}
-              </Text>
-              <FormControl isRequired>
-                <FormLabel>Referral Target *</FormLabel>
-                <Input
-                  value={referralForm.referredTo}
-                  onChange={(e) => setReferralForm({ ...referralForm, referredTo: e.target.value })}
-                  placeholder="Enter doctor ID or department name"
-                />
-              </FormControl>
-              <FormControl isRequired>
-                <FormLabel>Referral Notes *</FormLabel>
-                <Textarea
-                  value={referralForm.notes}
-                  onChange={(e) => setReferralForm({ ...referralForm, notes: e.target.value })}
-                  placeholder="Enter referral notes"
-                />
-              </FormControl>
-            </VStack>
+          <ModalBody maxH="600px" overflowY="auto">
+            {isLoadingDetails ? (
+              <Box textAlign="center" py={8}>
+                <Spinner size="xl" />
+                <Text mt={4}>Loading appointment details...</Text>
+              </Box>
+            ) : appointmentDetails ? (
+              <VStack spacing={4} align="stretch">
+                {/* Patient Information */}
+                <Box p={4} bg="gray.50" borderRadius="md">
+                  <Text fontSize="lg" fontWeight="bold" mb={3} color="blue.600">Patient Information</Text>
+                  <VStack spacing={2} align="start">
+                    <HStack>
+                      <Text fontWeight="600" w="120px">Name:</Text>
+                      <Text>{appointmentDetails.patient?.name || 'N/A'}</Text>
+                    </HStack>
+                    <HStack>
+                      <Text fontWeight="600" w="120px">Email:</Text>
+                      <Text>{appointmentDetails.patient?.email || 'N/A'}</Text>
+                    </HStack>
+                    <HStack>
+                      <Text fontWeight="600" w="120px">Phone:</Text>
+                      <Text>{appointmentDetails.patient?.phone || 'N/A'}</Text>
+                    </HStack>
+                    <HStack>
+                      <Text fontWeight="600" w="120px">Age:</Text>
+                      <Text>{appointmentDetails.patient?.age || 'N/A'}</Text>
+                    </HStack>
+                    <HStack>
+                      <Text fontWeight="600" w="120px">Gender:</Text>
+                      <Text>{appointmentDetails.patient?.gender || 'N/A'}</Text>
+                    </HStack>
+                  </VStack>
+                </Box>
+
+                {/* Doctor Information */}
+                <Box p={4} bg="blue.50" borderRadius="md">
+                  <Text fontSize="lg" fontWeight="bold" mb={3} color="blue.600">Doctor Information</Text>
+                  <VStack spacing={2} align="start">
+                    <HStack>
+                      <Text fontWeight="600" w="120px">Name:</Text>
+                      <Text>{appointmentDetails.doctor?.name || 'N/A'}</Text>
+                    </HStack>
+                    <HStack>
+                      <Text fontWeight="600" w="120px">Email:</Text>
+                      <Text>{appointmentDetails.doctor?.email || 'N/A'}</Text>
+                    </HStack>
+                    <HStack>
+                      <Text fontWeight="600" w="120px">Department:</Text>
+                      <Text>{appointmentDetails.doctor?.department?.name || 'N/A'}</Text>
+                    </HStack>
+                  </VStack>
+                </Box>
+
+                {/* Appointment Details */}
+                <Box p={4} bg="green.50" borderRadius="md">
+                  <Text fontSize="lg" fontWeight="bold" mb={3} color="blue.600">Appointment Details</Text>
+                  <VStack spacing={2} align="start">
+                    <HStack>
+                      <Text fontWeight="600" w="120px">Date & Time:</Text>
+                      <Text>{appointmentDetails.dateTime ? new Date(appointmentDetails.dateTime).toLocaleString() : 'N/A'}</Text>
+                    </HStack>
+                    <HStack>
+                      <Text fontWeight="600" w="120px">Status:</Text>
+                      <Badge colorScheme={
+                        appointmentDetails.status === 'COMPLETED' ? 'green' :
+                        appointmentDetails.status === 'SCHEDULED' ? 'blue' :
+                        appointmentDetails.status === 'CANCELLED' ? 'red' :
+                        appointmentDetails.status === 'REFERRED' ? 'purple' :
+                        'yellow'
+                      }>
+                        {appointmentDetails.status}
+                      </Badge>
+                    </HStack>
+                    <HStack>
+                      <Text fontWeight="600" w="120px">Visit Number:</Text>
+                      <Text>Visit #{appointmentDetails.visitNumber || 1}</Text>
+                    </HStack>
+                    <HStack>
+                      <Text fontWeight="600" w="120px">Notes:</Text>
+                      <Text>{appointmentDetails.notes || 'No notes'}</Text>
+                    </HStack>
+                  </VStack>
+                </Box>
+
+                {/* Referral Information */}
+                {(appointmentDetails.referredTo || appointmentDetails.referredFrom) && (
+                  <Box p={4} bg="purple.50" borderRadius="md">
+                    <Text fontSize="lg" fontWeight="bold" mb={3} color="blue.600">Referral Information</Text>
+                    <VStack spacing={3} align="start">
+                      {appointmentDetails.referredTo && (
+                        <Box>
+                          <Text fontWeight="600" mb={2}>Referred To:</Text>
+                          {appointmentDetails.referredToDoctor ? (
+                            <VStack spacing={1} align="start" ml={4}>
+                              <Text>Dr. {appointmentDetails.referredToDoctor.name}</Text>
+                              <Text fontSize="sm" color="gray.600">{appointmentDetails.referredToDoctor.department?.name || 'Department N/A'}</Text>
+                              <Text fontSize="sm" color="gray.600">{appointmentDetails.referredToDoctor.email}</Text>
+                            </VStack>
+                          ) : (
+                            <Text ml={4}>{appointmentDetails.referredTo}</Text>
+                          )}
+                        </Box>
+                      )}
+                      
+                      {appointmentDetails.referredFrom && (
+                        <Box>
+                          <Text fontWeight="600" mb={2}>Referred From:</Text>
+                          <Text ml={4}>{appointmentDetails.referredFrom}</Text>
+                        </Box>
+                      )}
+                    </VStack>
+                  </Box>
+                )}
+
+                {/* Medical Report Details */}
+                {appointmentDetails.reports && appointmentDetails.reports.length > 0 && (
+                  <Box p={4} bg="purple.50" borderRadius="md">
+                    <Text fontSize="lg" fontWeight="bold" mb={3} color="blue.600">Medical Report Details</Text>
+                    <VStack spacing={3} align="start">
+                      {appointmentDetails.reports.map((report) => (
+                        <Box key={report.id} p={3} bg="white" borderRadius="md" border="1px solid" borderColor="gray.200">
+                          <VStack spacing={2} align="start">
+                            <HStack>
+                              <Text fontWeight="500" w="100px">Diagnosis:</Text>
+                              <Text>{report.diagnosis || 'N/A'}</Text>
+                            </HStack>
+                            <HStack>
+                              <Text fontWeight="500" w="100px">Symptoms:</Text>
+                              <Text>{report.symptoms || 'N/A'}</Text>
+                            </HStack>
+                            <HStack>
+                              <Text fontWeight="500" w="100px">Treatment:</Text>
+                              <Text>{report.treatment || 'N/A'}</Text>
+                            </HStack>
+                            <HStack>
+                              <Text fontWeight="500" w="100px">Prescription:</Text>
+                              <Text>{report.prescription || 'N/A'}</Text>
+                            </HStack>
+                            <HStack>
+                              <Text fontWeight="500" w="100px">Notes:</Text>
+                              <Text>{report.notes || 'N/A'}</Text>
+                            </HStack>
+                            {report.reportUrl && (
+                              <HStack>
+                                <Text fontWeight="500" w="100px">Report File:</Text>
+                                <Button
+                                  size="sm"
+                                  colorScheme="blue"
+                                  variant="outline"
+                                  onClick={() => {
+                                    window.open(`${API_BASE}${report.reportUrl}`, '_blank');
+                                  }}
+                                >
+                                  View Report
+                                </Button>
+                              </HStack>
+                            )}
+                            {report.isReferred && (
+                              <Box mt={2} p={2} bg="purple.100" borderRadius="md">
+                                <Text fontWeight="500" mb={2}>Referral Details:</Text>
+                                <VStack spacing={1} align="start">
+                                  <HStack>
+                                    <Text fontWeight="500" w="120px">Referred:</Text>
+                                    <Badge colorScheme="purple">Yes</Badge>
+                                  </HStack>
+                                  <HStack>
+                                    <Text fontWeight="500" w="120px">Referral Target:</Text>
+                                    <Text>{report.referredTo || 'N/A'}</Text>
+                                  </HStack>
+                                  <HStack>
+                                    <Text fontWeight="500" w="120px">Referral Notes:</Text>
+                                    <Text>{report.referralNotes || 'N/A'}</Text>
+                                  </HStack>
+                                </VStack>
+                              </Box>
+                            )}
+                          </VStack>
+                        </Box>
+                      ))}
+                    </VStack>
+                  </Box>
+                )}
+
+                {/* Medical Report Group */}
+                {appointmentDetails.medicalReportGroup && (
+                  <Box p={4} bg="orange.50" borderRadius="md">
+                    <Text fontSize="lg" fontWeight="bold" mb={3} color="blue.600">Medical Report Group</Text>
+                    <VStack spacing={2} align="start">
+                      <HStack>
+                        <Text fontWeight="600" w="120px">Group Title:</Text>
+                        <Text>{appointmentDetails.medicalReportGroup.title || 'Untitled Group'}</Text>
+                      </HStack>
+                      <HStack>
+                        <Text fontWeight="600" w="120px">Description:</Text>
+                        <Text>{appointmentDetails.medicalReportGroup.description || 'No description'}</Text>
+                      </HStack>
+                      <HStack>
+                        <Text fontWeight="600" w="120px">Status:</Text>
+                        <Badge colorScheme={
+                          appointmentDetails.medicalReportGroup.status === 'ACTIVE' ? 'blue' :
+                          appointmentDetails.medicalReportGroup.status === 'COMPLETED' ? 'green' :
+                          'gray'
+                        }>
+                          {appointmentDetails.medicalReportGroup.status}
+                        </Badge>
+                      </HStack>
+                      <HStack>
+                        <Text fontWeight="600" w="120px">Started:</Text>
+                        <Text>{new Date(appointmentDetails.medicalReportGroup.startDate).toLocaleDateString()}</Text>
+                      </HStack>
+                    </VStack>
+                  </Box>
+                )}
+
+                {/* All Reports in Visit Cycle */}
+                {appointmentDetails.allReportsInGroup && appointmentDetails.allReportsInGroup.length > 0 && (
+                  <Box p={4} bg="teal.50" borderRadius="md">
+                    <Text fontSize="lg" fontWeight="bold" mb={3} color="blue.600">Complete Visit Cycle - All Reports</Text>
+                    <VStack spacing={3} align="stretch">
+                      {appointmentDetails.allReportsInGroup.map((report) => (
+                        <Box key={report.id} p={3} bg="white" borderRadius="md" border="1px solid" borderColor="gray.200">
+                          <HStack justify="space-between" mb={2}>
+                            <VStack align="start" spacing={1}>
+                              <Text fontWeight="500">Visit #{report.appointment?.visitNumber}</Text>
+                              <Text fontSize="sm" color="gray.600">
+                                Dr. {report.doctor?.name} - {new Date(report.createdAt).toLocaleDateString()}
+                              </Text>
+                            </VStack>
+                            <Badge colorScheme={report.appointment?.status === 'COMPLETED' ? 'green' : 'blue'}>
+                              {report.appointment?.status}
+                            </Badge>
+                          </HStack>
+                          <VStack spacing={1} align="start">
+                            <Text fontSize="sm"><strong>Diagnosis:</strong> {report.diagnosis || 'N/A'}</Text>
+                            <Text fontSize="sm"><strong>Treatment:</strong> {report.treatment || 'N/A'}</Text>
+                            <Text fontSize="sm"><strong>Notes:</strong> {report.notes || 'N/A'}</Text>
+                            {report.isReferred && (
+                              <Text fontSize="sm" color="purple.600">
+                                <strong>Referred to:</strong> {report.referredTo || 'N/A'}
+                              </Text>
+                            )}
+                            {report.reportUrl && (
+                              <Button
+                                size="xs"
+                                colorScheme="blue"
+                                variant="outline"
+                                onClick={() => {
+                                  window.open(`${API_BASE}${report.reportUrl}`, '_blank');
+                                }}
+                                mt={2}
+                              >
+                                View Report File
+                              </Button>
+                            )}
+                          </VStack>
+                        </Box>
+                      ))}
+                    </VStack>
+                  </Box>
+                )}
+
+                {/* Timestamps */}
+                <Box p={4} bg="gray.100" borderRadius="md">
+                  <Text fontSize="lg" fontWeight="bold" mb={3} color="blue.600">Timestamps</Text>
+                  <VStack spacing={2} align="start">
+                    <HStack>
+                      <Text fontWeight="600" w="120px">Created:</Text>
+                      <Text>{appointmentDetails.createdAt ? new Date(appointmentDetails.createdAt).toLocaleString() : 'N/A'}</Text>
+                    </HStack>
+                    <HStack>
+                      <Text fontWeight="600" w="120px">Updated:</Text>
+                      <Text>{appointmentDetails.updatedAt ? new Date(appointmentDetails.updatedAt).toLocaleString() : 'N/A'}</Text>
+                    </HStack>
+                  </VStack>
+                </Box>
+              </VStack>
+            ) : (
+              <Box textAlign="center" py={8}>
+                <Text>No appointment details available</Text>
+              </Box>
+            )}
           </ModalBody>
           <ModalFooter>
-            <Button colorScheme="gray" mr={3} onClick={() => setIsReferralModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button colorScheme="purple" onClick={submitReferral}>
-              Refer Appointment
+            <Button colorScheme="blue" onClick={() => setIsViewDetailsModalOpen(false)}>
+              Close
             </Button>
           </ModalFooter>
         </ModalContent>

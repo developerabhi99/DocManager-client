@@ -12,6 +12,7 @@ import {
   MdLock,
   MdSecurity,
   MdBusiness,
+  MdSwapCalls,
 } from 'react-icons/md';
 
 // Admin Imports
@@ -24,6 +25,7 @@ import DoctorSchedule from 'views/admin/schedule';
 import EmployeeSchedule from 'views/admin/employeeSchedule';
 import Departments from 'views/admin/departments';
 import MyAppointments from 'views/admin/myAppointments';
+import ReferredAppointments from 'views/admin/referred';
 import RTL from 'views/admin/rtl';
 
 // Auth Imports
@@ -86,6 +88,13 @@ const routes = [
     path: '/appointments',
     icon: <Icon as={MdEventAvailable} width="20px" height="20px" color="inherit" />,
     component: <AppointmentsAdmin />,
+  },
+  {
+    name: 'Referred',
+    layout: '/admin',
+    path: '/referred',
+    icon: <Icon as={MdSwapCalls} width="20px" height="20px" color="inherit" />,
+    component: <ReferredAppointments />,
   },
   {
     name: 'Schedule',
