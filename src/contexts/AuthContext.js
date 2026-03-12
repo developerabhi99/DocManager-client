@@ -41,12 +41,18 @@ function getActiveStorage() {
 export function AuthProvider({ children }) {
   const [token, setToken] = React.useState(() => readStoredToken());
   const [user, setUser] = React.useState(() => readStoredUser());
+  const [permissions, setPermissions] = React.useState(() => {
+    const storedUser = readStoredUser();
+    return storedUser?.permissions || [];
+  });
 
   React.useEffect(() => {
     const handleStorage = (e) => {
       if (e?.key === 'token' || e?.key === 'user') {
+        const newUser = readStoredUser();
         setToken(readStoredToken());
-        setUser(readStoredUser());
+        setUser(newUser);
+        setPermissions(newUser?.permissions || []);
       }
     };
 
@@ -63,12 +69,14 @@ export function AuthProvider({ children }) {
 
     setToken(token || '');
     setUser(user || null);
+    setPermissions(user?.permissions || []);
   }, []);
 
   const logout = React.useCallback(() => {
     clearAuthStorage();
     setToken('');
     setUser(null);
+    setPermissions([]);
   }, []);
 
   const updateUser = React.useCallback((patch) => {
@@ -76,6 +84,7 @@ export function AuthProvider({ children }) {
       const next = { ...(prev || {}), ...(patch || {}) };
       const storage = getActiveStorage();
       storage.setItem('user', JSON.stringify(next));
+      setPermissions(next?.permissions || []);
       return next;
     });
   }, []);
@@ -84,12 +93,13 @@ export function AuthProvider({ children }) {
     return {
       token,
       user,
+      permissions,
       isAuthenticated: Boolean(token),
       login,
       logout,
       updateUser,
     };
-  }, [token, user, login, logout, updateUser]);
+  }, [token, user, permissions, login, logout, updateUser]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

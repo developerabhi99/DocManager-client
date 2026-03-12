@@ -57,7 +57,7 @@ const TIME_SLOTS = [
 ];
 
 export default function EmployeeSchedule() {
-  const { token, user } = useAuth();
+  const { token, user, permissions } = useAuth();
   const toast = useToast();
 
   const [schedules, setSchedules] = useState([]);
@@ -247,7 +247,9 @@ export default function EmployeeSchedule() {
     }
   }, [selectedEmployee, fetchSchedules]);
 
-  const canManageOtherEmployees = user?.role === 'SUPER_ADMIN';
+  //const canManageOtherEmployees = user?.role === 'SUPER_ADMIN' || user?.role?.permissions === 'MANAGE_SCHEDULE';
+    const canManageOtherEmployees = user?.role === 'SUPER_ADMIN' || permissions.includes('MANAGE_SCHEDULE');
+
   const currentEmployeeName = employees.find(e => e.id === selectedEmployee)?.name || 'Select Employee';
 
   return (

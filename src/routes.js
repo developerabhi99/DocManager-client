@@ -13,6 +13,7 @@ import {
   MdSecurity,
   MdBusiness,
   MdSwapCalls,
+  MdHistory,
 } from 'react-icons/md';
 
 // Admin Imports
@@ -26,6 +27,7 @@ import EmployeeSchedule from 'views/admin/employeeSchedule';
 import Departments from 'views/admin/departments';
 import MyAppointments from 'views/admin/myAppointments';
 import ReferredAppointments from 'views/admin/referred';
+import PatientHistory from 'views/admin/patientHistory';
 import RTL from 'views/admin/rtl';
 
 // Auth Imports
@@ -95,6 +97,13 @@ const routes = [
     path: '/referred',
     icon: <Icon as={MdSwapCalls} width="20px" height="20px" color="inherit" />,
     component: <ReferredAppointments />,
+  },
+  {
+    name: 'Patient History',
+    layout: '/admin',
+    path: '/patient-history',
+    icon: <Icon as={MdHistory} width="20px" height="20px" color="inherit" />,
+    component: <PatientHistory />,
   },
   {
     name: 'Schedule',

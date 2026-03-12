@@ -57,7 +57,7 @@ const TIME_SLOTS = [
 ];
 
 export default function DoctorSchedule() {
-  const { token, user } = useAuth();
+  const { token, user, permissions } = useAuth();
   const toast = useToast();
 
   const [schedules, setSchedules] = useState([]);
@@ -200,7 +200,8 @@ export default function DoctorSchedule() {
     }
   }, [selectedDoctor, fetchSchedules]);
 
-  const canManageOtherDoctors = user?.role === 'SUPER_ADMIN';
+   console.log(user);
+  const canManageOtherDoctors = user?.role === 'SUPER_ADMIN' || permissions.includes('MANAGE_SCHEDULE');
   const currentDoctorName = doctors.find(d => d.id === selectedDoctor)?.name || 'Select Doctor';
 
   return (
