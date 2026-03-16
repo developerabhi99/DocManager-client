@@ -8,88 +8,123 @@ import { SidebarContext } from 'contexts/SidebarContext';
 import React, { useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import routes from 'routes.js';
+import { useAuth } from 'contexts/AuthContext';
 
 // Custom Chakra theme
 export default function Dashboard(props) {
   const { ...rest } = props;
+  const { user } = useAuth();
+  
   // states and functions
   const [fixed] = useState(false);
   const [toggleSidebar, setToggleSidebar] = useState(false);
+  
+  // Define permission requirements for each route
+  const routePermissions = {
+    '/default': [], // Main dashboard - visible to all authenticated users
+    '/profile': [], // Profile - visible to all authenticated users
+    '/users': ['MANAGE_USERS'], // Users management
+    '/access-control': ['MANAGE_USERS'], // Access control
+    '/appointments': ['MANAGE_APPOINTMENTS'], // Appointments management
+    '/referred': ['MANAGE_APPOINTMENTS'], // Referred appointments
+    '/patient-history': ['VIEW_REPORTS'], // Patient history
+    '/schedule': ['MANAGE_APPOINTMENTS'], // Doctor schedule
+    '/employee-schedule': ['MANAGE_APPOINTMENTS'], // Employee schedule
+    '/departments': ['MANAGE_DEPARTMENTS'], // Departments management
+    '/my-appointments': [], // My appointments - visible to all authenticated users
+  };
+  
+  // Filter routes based on user permissions
+  const getFilteredRoutes = () => {
+    return routes.filter(route => {
+      const requiredPermissions = routePermissions[route.path] || [];
+      
+      // If no permissions required, show to all authenticated users
+      if (requiredPermissions.length === 0) {
+        return true;
+      }
+      
+      // Check if user has any of the required permissions
+      return requiredPermissions.some(permission => 
+        user?.permissions?.includes(permission)
+      );
+    });
+  };
   // functions for changing the states from components
   const getRoute = () => {
     return window.location.pathname !== '/admin/full-screen-maps';
   };
-  const getActiveRoute = (routes) => {
+  const getActiveRoute = (filteredRoutes) => {
     let activeRoute = 'Default Brand Text';
-    for (let i = 0; i < routes.length; i++) {
-      if (routes[i].collapse) {
-        let collapseActiveRoute = getActiveRoute(routes[i].items);
+    for (let i = 0; i < filteredRoutes.length; i++) {
+      if (filteredRoutes[i].collapse) {
+        let collapseActiveRoute = getActiveRoute(filteredRoutes[i].items);
         if (collapseActiveRoute !== activeRoute) {
           return collapseActiveRoute;
         }
-      } else if (routes[i].category) {
-        let categoryActiveRoute = getActiveRoute(routes[i].items);
+      } else if (filteredRoutes[i].category) {
+        let categoryActiveRoute = getActiveRoute(filteredRoutes[i].items);
         if (categoryActiveRoute !== activeRoute) {
           return categoryActiveRoute;
         }
       } else {
         if (
-          window.location.href.indexOf(routes[i].layout + routes[i].path) !== -1
+          window.location.href.indexOf(filteredRoutes[i].layout + filteredRoutes[i].path) !== -1
         ) {
-          return routes[i].name;
+          return filteredRoutes[i].name;
         }
       }
     }
     return activeRoute;
   };
-  const getActiveNavbar = (routes) => {
+  const getActiveNavbar = (filteredRoutes) => {
     let activeNavbar = false;
-    for (let i = 0; i < routes.length; i++) {
-      if (routes[i].collapse) {
-        let collapseActiveNavbar = getActiveNavbar(routes[i].items);
+    for (let i = 0; i < filteredRoutes.length; i++) {
+      if (filteredRoutes[i].collapse) {
+        let collapseActiveNavbar = getActiveNavbar(filteredRoutes[i].items);
         if (collapseActiveNavbar !== activeNavbar) {
           return collapseActiveNavbar;
         }
-      } else if (routes[i].category) {
-        let categoryActiveNavbar = getActiveNavbar(routes[i].items);
+      } else if (filteredRoutes[i].category) {
+        let categoryActiveNavbar = getActiveNavbar(filteredRoutes[i].items);
         if (categoryActiveNavbar !== activeNavbar) {
           return categoryActiveNavbar;
         }
       } else {
         if (
-          window.location.href.indexOf(routes[i].layout + routes[i].path) !== -1
+          window.location.href.indexOf(filteredRoutes[i].layout + filteredRoutes[i].path) !== -1
         ) {
-          return routes[i].secondary;
+          return filteredRoutes[i].secondary;
         }
       }
     }
     return activeNavbar;
   };
-  const getActiveNavbarText = (routes) => {
+  const getActiveNavbarText = (filteredRoutes) => {
     let activeNavbar = false;
-    for (let i = 0; i < routes.length; i++) {
-      if (routes[i].collapse) {
-        let collapseActiveNavbar = getActiveNavbarText(routes[i].items);
+    for (let i = 0; i < filteredRoutes.length; i++) {
+      if (filteredRoutes[i].collapse) {
+        let collapseActiveNavbar = getActiveNavbarText(filteredRoutes[i].items);
         if (collapseActiveNavbar !== activeNavbar) {
           return collapseActiveNavbar;
         }
-      } else if (routes[i].category) {
-        let categoryActiveNavbar = getActiveNavbarText(routes[i].items);
+      } else if (filteredRoutes[i].category) {
+        let categoryActiveNavbar = getActiveNavbarText(filteredRoutes[i].items);
         if (categoryActiveNavbar !== activeNavbar) {
           return categoryActiveNavbar;
         }
       } else {
         if (
-          window.location.href.indexOf(routes[i].layout + routes[i].path) !== -1
+          window.location.href.indexOf(filteredRoutes[i].layout + filteredRoutes[i].path) !== -1
         ) {
-          return routes[i].messageNavbar;
+          return filteredRoutes[i].messageNavbar;
         }
       }
     }
     return activeNavbar;
   };
-  const getRoutes = (routes) => {
-    return routes.map((route, key) => {
+  const getRoutes = (filteredRoutes) => {
+    return filteredRoutes.map((route, key) => {
       if (route.layout === '/admin') {
         return (
           <Route path={`${route.path}`} element={route.component} key={key} />
@@ -105,6 +140,9 @@ export default function Dashboard(props) {
   document.documentElement.dir = 'ltr';
   const { onOpen } = useDisclosure();
   document.documentElement.dir = 'ltr';
+  
+  const filteredRoutes = getFilteredRoutes();
+  
   return (
     <Box>
       <Box>
@@ -114,7 +152,7 @@ export default function Dashboard(props) {
             setToggleSidebar,
           }}
         >
-          <Sidebar routes={routes} display="none" {...rest} />
+          <Sidebar routes={filteredRoutes} display="none" {...rest} />
           <Box
             float="right"
             minHeight="100vh"
@@ -134,9 +172,9 @@ export default function Dashboard(props) {
                 <Navbar
                   onOpen={onOpen}
                   logoText={'DocManager'}
-                  brandText={getActiveRoute(routes)}
-                  secondary={getActiveNavbar(routes)}
-                  message={getActiveNavbarText(routes)}
+                  brandText={getActiveRoute(filteredRoutes)}
+                  secondary={getActiveNavbar(filteredRoutes)}
+                  message={getActiveNavbarText(filteredRoutes)}
                   fixed={fixed}
                   {...rest}
                 />
@@ -152,7 +190,7 @@ export default function Dashboard(props) {
                 pt="50px"
               >
                 <Routes>
-                  {getRoutes(routes)}
+                  {getRoutes(filteredRoutes)}
                   <Route
                     path="/"
                     element={<Navigate to="/admin/default" replace />}

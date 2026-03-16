@@ -90,19 +90,14 @@ function MyAppointments() {
   const [selectedPatient, setSelectedPatient] = useState('');
   
   const [departments, setDepartments] = useState([]);
-  const [completionForm, setCompletionForm] = useState({
-    amount: '',
-    paymentMethod: 'CASH',
-    paymentDescription: '',
-    shouldRefer: false,
-    referredTo: '',
-    referNotes: '',
-    notes: '',
-    diagnosis: '',
-    symptoms: '',
-    treatment: '',
-    prescription: '',
+  const [completionForm, setCompletionForm] = useState({ 
+    notes: '', 
+    diagnosis: '', 
+    symptoms: '', 
+    treatment: '', 
+    prescription: '', 
     reportFile: null,
+    shouldRefer: false,
     referralDepartment: '',
     referralTarget: '',
     referralNotes: ''
@@ -207,7 +202,8 @@ function MyAppointments() {
       
       if (res.ok) {
         const data = await res.json();
-        setDepartments(data.departments || []);
+        console.log("department ",data);
+        setDepartments(data || []);
       } else {
         toast({ title: 'Failed to fetch departments', status: 'error' });
       }
@@ -216,61 +212,201 @@ function MyAppointments() {
     }
   }, [token, toast]);
 
-  const handleCompleteAppointment = async () => {
+  const handleViewDetails = async (appointment) => {
+    setSelectedAppointment(appointment);
+    setIsLoadingDetails(true);
+    
     try {
-      const endpoint = completionForm.shouldRefer 
-        ? `${API_BASE}/appointments/${selectedAppointment.id}/complete-and-refer`
-        : `${API_BASE}/appointments/${selectedAppointment.id}/complete`;
+      // Fetch comprehensive appointment details including reports and referral information
+      const response = await fetch(`${API_BASE}/appointments/${appointment.id}/details`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       
-      const body = completionForm.shouldRefer 
-        ? {
-            amount: completionForm.amount,
-            paymentMethod: completionForm.paymentMethod,
-            paymentDescription: completionForm.paymentDescription,
-            referredTo: completionForm.referredTo,
-            referNotes: completionForm.referNotes
+      if (response.ok) {
+        const data = await response.json();
+        setAppointmentDetails(data);
+      } else {
+        // Fallback to basic appointment data if detailed endpoint fails
+        setAppointmentDetails(appointment);
+      }
+    } catch (error) {
+      console.error('Error fetching appointment details:', error);
+      // Fallback to basic appointment data
+      setAppointmentDetails(appointment);
+    } finally {
+      setIsLoadingDetails(false);
+      setIsViewDetailsModalOpen(true);
+    }
+  };
+
+  const handleCompleteAppointment = (appointment) => {
+    setSelectedAppointment(appointment);
+    setCompletionForm({ 
+      notes: '', 
+      diagnosis: '', 
+      symptoms: '', 
+      treatment: '', 
+      prescription: '', 
+      reportFile: null,
+      shouldRefer: false,
+      referralDepartment: '',
+      referralTarget: '',
+      referralNotes: ''
+    });
+    setUploadProgress(0);
+    setIsUploading(false);
+    setIsCompletionModalOpen(true);
+  };
+
+  const submitCompletion = async () => {
+    if (!completionForm.notes || !completionForm.diagnosis) {
+      toast({ title: 'Notes and diagnosis are required', status: 'error' });
+      return;
+    }
+
+    // Additional validation for referral
+    if (completionForm.shouldRefer && (!completionForm.referralTarget || !completionForm.referralNotes)) {
+      toast({ title: 'Referral target and notes are required when referring', status: 'error' });
+      return;
+    }
+
+    try {
+      // Get the patient's medical report group if available
+      let medicalReportGroupId = null;
+      try {
+        const patientResponse = await fetch(`${API_BASE}/patients/${selectedAppointment.patientId}/report-groups`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        
+        if (patientResponse.ok) {
+          const patientData = await patientResponse.json();
+          // Get the most recent active medical report group
+          const activeGroups = patientData.filter(group => group.status === 'ACTIVE');
+          if (activeGroups.length > 0) {
+            medicalReportGroupId = activeGroups[0].id;
           }
-        : {
-            amount: completionForm.amount,
-            paymentMethod: completionForm.paymentMethod,
-            paymentDescription: completionForm.paymentDescription
+        }
+      } catch (error) {
+        console.warn('Could not fetch medical report groups:', error);
+      }
+
+      // Prepare the completion payload
+      const completionPayload = {
+        notes: completionForm.notes,
+        diagnosis: completionForm.diagnosis,
+        symptoms: completionForm.symptoms,
+        treatment: completionForm.treatment,
+        prescription: completionForm.prescription,
+        ...(completionForm.reportFile && { reportUrl: completionForm.reportFile }),
+        // Include medical report group if available
+        ...(medicalReportGroupId && { medicalReportGroupId }),
+        // Referral information
+        isReferred: completionForm.shouldRefer || false,
+        referredTo: completionForm.shouldRefer ? completionForm.referralTarget : null,
+        referralReason: completionForm.shouldRefer ? completionForm.referralNotes : null,
+        referralNotes: completionForm.shouldRefer ? completionForm.referralNotes : null
+      };
+
+      const completionRes = await fetch(`${API_BASE}/appointments/${selectedAppointment.id}/complete`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json', 
+          Authorization: `Bearer ${token}` 
+        },
+        body: JSON.stringify(completionPayload),
+      });
+      
+      const completionData = await completionRes.json();
+      
+      if (!completionRes.ok) {
+        const err = await completionRes.json();
+        toast({ title: 'Failed to complete appointment', description: err.error, status: 'error' });
+        return;
+      }
+
+      // If referral was requested, the backend already handled it
+      if (completionForm.shouldRefer) {
+        toast({ title: 'Appointment completed and referred successfully', status: 'success' });
+        
+        // Optionally, you can create the referral appointment immediately
+        if (completionData.medicalReportGroupId) {
+          const referralAppointmentPayload = {
+            patientId: selectedAppointment.patientId,
+            doctorId: completionForm.referralTarget,
+            dateTime: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // Tomorrow
+            notes: `Referral from Dr. ${selectedAppointment.doctor.name}. ${completionForm.referralNotes}`,
+            referredFrom: selectedAppointment.id,
+            medicalReportGroupId: completionData.medicalReportGroupId
           };
 
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify(body)
-      });
+          try {
+            const referralRes = await fetch(`${API_BASE}/appointments/referral`, {
+              method: 'POST',
+              headers: { 
+                'Content-Type': 'application/json', 
+                Authorization: `Bearer ${token}` 
+              },
+              body: JSON.stringify(referralAppointmentPayload),
+            });
 
-      if (res.ok) {
-        toast({ 
-          title: completionForm.shouldRefer ? 'Appointment completed and patient referred' : 'Appointment completed', 
-          status: 'success' 
-        });
-        onCompleteClose();
-        setCompletionForm({
-          amount: '',
-          paymentMethod: 'CASH',
-          paymentDescription: '',
-          shouldRefer: false,
-          referredTo: '',
-          referNotes: ''
-        });
-        fetchMyAppointments();
+            if (referralRes.ok) {
+              const referralData = await referralRes.json();
+              toast({ 
+                title: 'Referral appointment created successfully', 
+                description: `Visit #${referralData.visitNumber} scheduled`, 
+                status: 'success' 
+              });
+            } else {
+              const err = await referralRes.json();
+              toast({ 
+                title: 'Referral appointment creation failed', 
+                description: err.error, 
+                status: 'warning' 
+              });
+            }
+          } catch (error) {
+            toast({ 
+              title: 'Failed to create referral appointment', 
+              description: error.message, 
+              status: 'warning' 
+            });
+          }
+        }
       } else {
-        const err = await res.json();
-        toast({ 
-          title: 'Failed to complete appointment', 
-          description: err.error || err.message, 
-          status: 'error' 
-        });
+        toast({ title: 'Appointment completed successfully', status: 'success' });
       }
-    } catch (err) {
-      toast({ title: 'Error completing appointment', status: 'error' });
+
+      // Close modal and reset form
+      setIsCompletionModalOpen(false);
+      setCompletionForm({ 
+        notes: '', 
+        diagnosis: '', 
+        symptoms: '', 
+        treatment: '', 
+        prescription: '', 
+        reportFile: null,
+        shouldRefer: false,
+        referralDepartment: '',
+        referralTarget: '',
+        referralNotes: ''
+      });
+      setUploadProgress(0);
+      setIsUploading(false);
+      
+      // Refresh appointments list
+      fetchMyAppointments();
+    } catch (error) {
+      console.error('Completion error:', error);
+      toast({ title: 'Failed to complete appointment', description: error.message, status: 'error' });
     }
+  };
+
+  const submitReferral = async () => {
+    // This function is now integrated into submitCompletion
+    // Kept for backward compatibility but should not be used directly
+    await submitCompletion();
   };
 
   const handleReferPatient = async () => {
@@ -343,93 +479,15 @@ function MyAppointments() {
     }
   };
 
-  const submitCompletion = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/appointments/${selectedAppointment?.id}/complete`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          amount: completionForm.amount,
-          paymentMethod: completionForm.paymentMethod,
-          paymentDescription: completionForm.paymentDescription,
-          notes: completionForm.notes,
-          diagnosis: completionForm.diagnosis,
-          symptoms: completionForm.symptoms,
-          treatment: completionForm.treatment,
-          prescription: completionForm.prescription,
-          reportFile: completionForm.reportFile
-        })
-      });
-
-      if (res.ok) {
-        toast({ title: 'Appointment completed successfully', status: 'success' });
-        setIsCompletionModalOpen(false);
-        resetCompletionForm();
-        fetchMyAppointments();
-      } else {
-        const err = await res.json();
-        toast({ title: 'Failed to complete appointment', description: err.error, status: 'error' });
-      }
-    } catch (error) {
-      toast({ title: 'Error completing appointment', status: 'error' });
-    }
-  };
-
-  const submitReferral = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/appointments/${selectedAppointment?.id}/complete-and-refer`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          amount: completionForm.amount,
-          paymentMethod: completionForm.paymentMethod,
-          paymentDescription: completionForm.paymentDescription,
-          notes: completionForm.notes,
-          diagnosis: completionForm.diagnosis,
-          symptoms: completionForm.symptoms,
-          treatment: completionForm.treatment,
-          prescription: completionForm.prescription,
-          reportFile: completionForm.reportFile,
-          referralDepartment: completionForm.referralDepartment,
-          referralTarget: completionForm.referralTarget,
-          referralNotes: completionForm.referralNotes
-        })
-      });
-
-      if (res.ok) {
-        toast({ title: 'Appointment completed and patient referred', status: 'success' });
-        setIsCompletionModalOpen(false);
-        resetCompletionForm();
-        fetchMyAppointments();
-      } else {
-        const err = await res.json();
-        toast({ title: 'Failed to complete and refer appointment', description: err.error, status: 'error' });
-      }
-    } catch (error) {
-      toast({ title: 'Error completing and referring appointment', status: 'error' });
-    }
-  };
-
   const resetCompletionForm = () => {
     setCompletionForm({
-      amount: '',
-      paymentMethod: 'CASH',
-      paymentDescription: '',
-      shouldRefer: false,
-      referredTo: '',
-      referNotes: '',
-      notes: '',
-      diagnosis: '',
-      symptoms: '',
-      treatment: '',
-      prescription: '',
+      notes: '', 
+      diagnosis: '', 
+      symptoms: '', 
+      treatment: '', 
+      prescription: '', 
       reportFile: null,
+      shouldRefer: false,
       referralDepartment: '',
       referralTarget: '',
       referralNotes: ''
@@ -597,8 +655,8 @@ function MyAppointments() {
                 appointments={appointments.filter(apt => apt.status === 'SCHEDULED')}
                 status="SCHEDULED"
                 user={user}
-                onViewDetails={(apt) => { setSelectedAppointment(apt); onDetailsOpen(); }}
-                onComplete={(apt) => { setSelectedAppointment(apt); onCompleteOpen(); }}
+                onViewDetails={(apt) => handleViewDetails(apt)}
+                onComplete={(apt) => handleCompleteAppointment(apt)}
                 onRefer={(apt) => { setSelectedAppointment(apt); onReferOpen(); }}
               />
             </TabPanel>
@@ -607,7 +665,7 @@ function MyAppointments() {
                 appointments={appointments.filter(apt => apt.status === 'COMPLETED')}
                 status="COMPLETED"
                 user={user}
-                onViewDetails={(apt) => { setSelectedAppointment(apt); onDetailsOpen(); }}
+                onViewDetails={(apt) => handleViewDetails(apt)}
               />
             </TabPanel>
             <TabPanel>
@@ -615,7 +673,7 @@ function MyAppointments() {
                 appointments={appointments.filter(apt => apt.status === 'CANCELLED')}
                 status="CANCELLED"
                 user={user}
-                onViewDetails={(apt) => { setSelectedAppointment(apt); onDetailsOpen(); }}
+                onViewDetails={(apt) => handleViewDetails(apt)}
               />
             </TabPanel>
             <TabPanel>
@@ -623,7 +681,7 @@ function MyAppointments() {
                 appointments={appointments.filter(apt => apt.status === 'REFERRED')}
                 status="REFERRED"
                 user={user}
-                onViewDetails={(apt) => { setSelectedAppointment(apt); onDetailsOpen(); }}
+                onViewDetails={(apt) => handleViewDetails(apt)}
               />
             </TabPanel>
           </TabPanels>
@@ -1300,15 +1358,9 @@ function AppointmentList({ appointments, status, user, onViewDetails, onComplete
                 View Details
               </Button>
               
-              {user.role === 'Doctor' && status === 'SCHEDULED' && (
+              { status === 'SCHEDULED' && (
                 <>
-                  <Button
-                    size="sm"
-                    colorScheme="green"
-                    onClick={() => onComplete(appointment)}
-                  >
-                    Complete
-                  </Button>
+    
                   <Button 
                     colorScheme="purple"
                     variant="outline"

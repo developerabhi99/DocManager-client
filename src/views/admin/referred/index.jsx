@@ -110,7 +110,7 @@ export default function ReferredAppointments() {
   const fetchAvailableSlots = async (doctorId, date) => {
     try {
       setIsLoadingSlots(true);
-      const response = await fetch(`${API_BASE}/doctors/${doctorId}/availability?date=${date}`, {
+      const response = await fetch(`${API_BASE}/employees/${doctorId}/availability?date=${date}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -172,16 +172,44 @@ export default function ReferredAppointments() {
     }
   };
 
-  const handleScheduleAppointment = (appointment) => {
+  const handleScheduleAppointment = async (appointment) => {
     setSelectedAppointment(appointment);
     
-    // Filter doctors by referred department
+    // Fetch departments with users to get employees from the referred department
     const referredDeptId = appointment.referredToDoctor?.department?.id;
-    const filtered = referredDeptId 
-      ? doctors.filter(doctor => doctor.department?.id === referredDeptId)
-      : doctors; // Fallback to all doctors if no department specified
-    
-    setFilteredDoctors(filtered);
+    if (referredDeptId) {
+      try {
+        const response = await fetch(`${API_BASE}/admin/departments`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          const departments = data.departments || data;
+          
+          // Find the referred department and get its users (employees)
+          const selectedDepartment = departments.find(dept => dept.id === referredDeptId);
+          const departmentUsers = selectedDepartment?.users || [];
+          
+          console.log('Referred department ID:', referredDeptId);
+          console.log('Selected department:', selectedDepartment);
+          console.log('Department users:', departmentUsers);
+          
+          setFilteredDoctors(departmentUsers);
+        } else {
+          console.error('Failed to fetch departments');
+          setFilteredDoctors([]);
+        }
+      } catch (error) {
+        console.error('Error fetching departments:', error);
+        setFilteredDoctors([]);
+      }
+    } else {
+      console.error('No referred department ID found');
+      setFilteredDoctors([]);
+    }
     
     setScheduleForm({ 
       doctorId: appointment.referredTo || '', 
@@ -200,7 +228,7 @@ export default function ReferredAppointments() {
     }
 
     try {
-      const response = await fetch(`${API_BASE}/admin/appointments`, {
+      const response = await fetch(`${API_BASE}/appointments/referral`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -226,13 +254,13 @@ export default function ReferredAppointments() {
             'Authorization': `Bearer ${token}`
           },
           body: JSON.stringify({
-            status: 'PENDING_PAYMENT'
+            status: 'COMPLETED'
           }),
         });
 
         toast({ 
           title: 'Appointment scheduled successfully', 
-          description: `Visit #${newAppointment.visitNumber} created. Payment can now be processed.`,
+          description: `Referral appointment created for ${newAppointment.patient?.name || 'patient'}. Payment can now be processed.`,
           status: 'success' 
         });
         
@@ -292,6 +320,7 @@ export default function ReferredAppointments() {
                   <Th>Patient</Th>
                   <Th>Original Doctor</Th>
                   <Th>Referred To</Th>
+                  <Th>Department</Th>
                   <Th>Visit #</Th>
                   <Th>Status</Th>
                   <Th>Date</Th>
@@ -322,6 +351,15 @@ export default function ReferredAppointments() {
                         </VStack>
                       ) : (
                         <Text color="gray.500">Not assigned</Text>
+                      )}
+                    </Td>
+                    <Td>
+                      {apt.referredToDoctor?.department?.name ? (
+                        <Badge colorScheme="purple" variant="outline">
+                          {apt.referredToDoctor.department.name}
+                        </Badge>
+                      ) : (
+                        <Text color="gray.500">-</Text>
                       )}
                     </Td>
                     <Td>
@@ -454,7 +492,7 @@ export default function ReferredAppointments() {
                 >
                   {filteredDoctors.map((doctor) => (
                     <option key={doctor.id} value={doctor.id}>
-                      Dr. {doctor.name} - {doctor.department?.name}
+                      Dr. {doctor.name}
                     </option>
                   ))}
                 </Select>
