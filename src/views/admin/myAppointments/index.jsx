@@ -56,6 +56,7 @@ import {
 import { useAuth } from '../../../contexts/AuthContext';
 
 const API_BASE = 'http://localhost:8002/api';
+const BASE = 'http://localhost:8002';
 
 // Utility functions
 const getStatusColor = (status) => {
@@ -273,6 +274,19 @@ function MyAppointments() {
     }
 
     try {
+      console.log('🚀 Starting completion/referral submission...');
+      console.log('📋 Form data:', {
+        notes: completionForm.notes,
+        diagnosis: completionForm.diagnosis,
+        symptoms: completionForm.symptoms,
+        treatment: completionForm.treatment,
+        prescription: completionForm.prescription,
+        shouldRefer: completionForm.shouldRefer,
+        referralTarget: completionForm.referralTarget,
+        referralNotes: completionForm.referralNotes,
+        hasReportFile: !!completionForm.reportFile
+      });
+
       // Get the patient's medical report group if available
       let medicalReportGroupId = null;
       try {
@@ -292,67 +306,93 @@ function MyAppointments() {
         console.warn('Could not fetch medical report groups:', error);
       }
 
-      // Prepare the completion payload
-      const completionPayload = {
-        notes: completionForm.notes,
-        diagnosis: completionForm.diagnosis,
-        symptoms: completionForm.symptoms,
-        treatment: completionForm.treatment,
-        prescription: completionForm.prescription,
-        ...(completionForm.reportFile && { reportUrl: completionForm.reportFile }),
-        // Include medical report group if available
-        ...(medicalReportGroupId && { medicalReportGroupId }),
-        // Referral information
-        isReferred: completionForm.shouldRefer || false,
-        referredTo: completionForm.shouldRefer ? completionForm.referralTarget : null,
-        referralReason: completionForm.shouldRefer ? completionForm.referralNotes : null,
-        referralNotes: completionForm.shouldRefer ? completionForm.referralNotes : null
-      };
+      // Create FormData for the request
+      const formData = new FormData();
+      
+      // Add all form fields
+      formData.append('notes', completionForm.notes);
+      formData.append('diagnosis', completionForm.diagnosis);
+      formData.append('symptoms', completionForm.symptoms);
+      formData.append('treatment', completionForm.treatment);
+      formData.append('prescription', completionForm.prescription);
+      formData.append('isReferred', completionForm.shouldRefer ? 'true' : 'false');
+      formData.append('referredTo', completionForm.shouldRefer ? completionForm.referralTarget : '');
+      formData.append('referralReason', completionForm.shouldRefer ? completionForm.referralNotes : '');
+      
+      // Include medical report group if available
+      if (medicalReportGroupId) {
+        formData.append('medicalReportGroupId', medicalReportGroupId);
+      }
+      
+      // Add file if it exists
+      if (completionForm.reportFile) {
+        console.log('📎 Adding file to payload:', {
+          name: completionForm.reportFile.name,
+          size: completionForm.reportFile.size,
+          type: completionForm.reportFile.type
+        });
+        formData.append('reportFile', completionForm.reportFile);
+      }
 
+      console.log('📤 Sending FormData with fields:', {
+        fieldCount: Array.from(formData.keys()).length,
+        fields: Array.from(formData.keys()),
+        hasFile: formData.has('reportFile'),
+        fileName: completionForm.reportFile?.name
+      });
+
+      // Send the request
       const completionRes = await fetch(`${API_BASE}/appointments/${selectedAppointment.id}/complete`, {
         method: 'POST',
         headers: { 
-          'Content-Type': 'application/json', 
-          Authorization: `Bearer ${token}` 
+          'Authorization': `Bearer ${token}`
+          // Don't set Content-Type for FormData - browser sets it automatically with boundary
         },
-        body: JSON.stringify(completionPayload),
+        body: formData,
       });
       
+      console.log('📡 Completion response status:', completionRes.status);
       const completionData = await completionRes.json();
+      console.log('📊 Completion response data:', completionData);
       
       if (!completionRes.ok) {
-        const err = await completionRes.json();
+        const err = completionData;
+        console.error('❌ Completion failed:', err);
         toast({ title: 'Failed to complete appointment', description: err.error, status: 'error' });
         return;
       }
 
       // If referral was requested, the backend already handled it
       if (completionForm.shouldRefer) {
+        console.log('✅ Referral processed successfully');
         toast({ title: 'Appointment completed and referred successfully', status: 'success' });
         
-        // Optionally, you can create the referral appointment immediately
+        // Optionally, you can create a referral appointment immediately
         if (completionData.medicalReportGroupId) {
           const referralAppointmentPayload = {
             patientId: selectedAppointment.patientId,
             doctorId: completionForm.referralTarget,
             dateTime: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // Tomorrow
-            notes: `Referral from Dr. ${selectedAppointment.doctor.name}. ${completionForm.referralNotes}`,
+            notes: `Referral from Dr. ${selectedAppointment}. ${completionForm.referralNotes}`,
             referredFrom: selectedAppointment.id,
             medicalReportGroupId: completionData.medicalReportGroupId
           };
+
+          console.log('🔄 Creating referral appointment:', referralAppointmentPayload);
 
           try {
             const referralRes = await fetch(`${API_BASE}/appointments/referral`, {
               method: 'POST',
               headers: { 
                 'Content-Type': 'application/json', 
-                Authorization: `Bearer ${token}` 
+                'Authorization': `Bearer ${token}` 
               },
               body: JSON.stringify(referralAppointmentPayload),
             });
 
             if (referralRes.ok) {
               const referralData = await referralRes.json();
+              console.log('✅ Referral appointment created:', referralData);
               toast({ 
                 title: 'Referral appointment created successfully', 
                 description: `Visit #${referralData.visitNumber} scheduled`, 
@@ -360,6 +400,7 @@ function MyAppointments() {
               });
             } else {
               const err = await referralRes.json();
+              console.error('❌ Referral creation failed:', err);
               toast({ 
                 title: 'Referral appointment creation failed', 
                 description: err.error, 
@@ -367,6 +408,7 @@ function MyAppointments() {
               });
             }
           } catch (error) {
+            console.error('❌ Failed to create referral appointment:', error);
             toast({ 
               title: 'Failed to create referral appointment', 
               description: error.message, 
@@ -375,12 +417,13 @@ function MyAppointments() {
           }
         }
       } else {
+        console.log('✅ Appointment completed successfully');
         toast({ title: 'Appointment completed successfully', status: 'success' });
       }
 
       // Close modal and reset form
       setIsCompletionModalOpen(false);
-      setCompletionForm({ 
+      setCompletionForm({
         notes: '', 
         diagnosis: '', 
         symptoms: '', 
@@ -397,9 +440,14 @@ function MyAppointments() {
       
       // Refresh appointments list
       fetchMyAppointments();
+      
     } catch (error) {
-      console.error('Completion error:', error);
-      toast({ title: 'Failed to complete appointment', description: error.message, status: 'error' });
+      console.error('❌ Submission error:', error);
+      toast({ 
+        title: 'Failed to complete appointment', 
+        description: error.message, 
+        status: 'error' 
+      });
     }
   };
 
@@ -437,6 +485,15 @@ function MyAppointments() {
   };
 
   const handleFileUpload = async (file) => {
+    console.log('🚀 Starting file upload process...');
+    console.log('📤 Upload parameters:', {
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: file.type,
+      appointmentId: selectedAppointment?.id,
+      hasToken: !!token
+    });
+    
     setIsUploading(true);
     setUploadProgress(0);
     
@@ -444,35 +501,92 @@ function MyAppointments() {
     formData.append('file', file);
     formData.append('appointmentId', selectedAppointment?.id);
     
+    console.log('📦 FormData created:', {
+      hasFile: formData.has('file'),
+      hasAppointmentId: formData.has('appointmentId'),
+      appointmentId: selectedAppointment?.id
+    });
+    
     try {
       const xhr = new XMLHttpRequest();
+      const uploadUrl = `${API_BASE}/appointments/${selectedAppointment?.id}/upload-report`;
+      console.log('🌐 Upload URL:', uploadUrl);
+      
       xhr.upload.addEventListener('progress', (e) => {
         if (e.lengthComputable) {
           const progress = (e.loaded / e.total) * 100;
+          console.log('📈 Upload progress:', {
+            loaded: e.loaded,
+            total: e.total,
+            progress: Math.round(progress) + '%'
+          });
           setUploadProgress(progress);
         }
       });
       
       xhr.addEventListener('load', () => {
+        console.log('📡 Upload completed:', {
+          status: xhr.status,
+          statusText: xhr.statusText,
+          responseText: xhr.responseText
+        });
+        
         if (xhr.status === 200) {
-          const response = JSON.parse(xhr.responseText);
-          setCompletionForm({ ...completionForm, reportFile: response.fileUrl });
-          setUploadProgress(100);
-          toast({ title: 'File uploaded successfully', status: 'success' });
+          try {
+            const response = JSON.parse(xhr.responseText);
+            console.log('✅ Upload successful:', response);
+            setCompletionForm({ ...completionForm, reportFile: response.fileUrl });
+            setUploadProgress(100);
+            toast({ title: 'File uploaded successfully', status: 'success' });
+          } catch (parseError) {
+            console.error('❌ Failed to parse response:', parseError);
+            console.log('Raw response:', xhr.responseText);
+            toast({ title: 'Upload response error', status: 'error' });
+          }
+        } else {
+          console.error('❌ Upload failed with status:', xhr.status);
+          try {
+            const errorResponse = JSON.parse(xhr.responseText);
+            console.log('Error response:', errorResponse);
+            toast({ 
+              title: 'Upload failed', 
+              description: errorResponse.message || `Status: ${xhr.status}`,
+              status: 'error' 
+            });
+          } catch (e) {
+            console.log('Raw error response:', xhr.responseText);
+            toast({ 
+              title: 'Upload failed', 
+              description: `Status: ${xhr.status}`,
+              status: 'error' 
+            });
+          }
         }
       });
       
-      xhr.addEventListener('error', () => {
-        toast({ title: 'Upload failed', status: 'error' });
+      xhr.addEventListener('error', (error) => {
+        console.error('❌ Network error during upload:', error);
+        toast({ title: 'Upload failed', description: 'Network error', status: 'error' });
       });
       
-      xhr.open('POST', `${API_BASE}/appointments/${selectedAppointment?.id}/upload-report`);
+      xhr.addEventListener('timeout', () => {
+        console.error('⏰ Upload timeout');
+        toast({ title: 'Upload timeout', status: 'error' });
+      });
+      
+      xhr.open('POST', uploadUrl);
       xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      console.log('🔐 Authorization header set:', token ? 'Bearer [TOKEN]' : 'NO TOKEN');
+      
+      console.log('📤 Sending request...');
       xhr.send(formData);
+      
     } catch (error) {
-      toast({ title: 'Upload error', status: 'error' });
+      console.error('❌ Upload setup error:', error);
+      toast({ title: 'Upload error', description: error.message, status: 'error' });
     } finally {
       setTimeout(() => {
+        console.log('🏁 Upload process finished');
         setIsUploading(false);
         setUploadProgress(0);
       }, 1000);
@@ -767,6 +881,14 @@ function MyAppointments() {
                     accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
                     onChange={(e) => {
                       const file = e.target.files[0];
+                      console.log('📁 File selected:', file);
+                      console.log('📊 File details:', {
+                        name: file?.name,
+                        size: file?.size,
+                        type: file?.type,
+                        lastModified: file?.lastModified
+                      });
+                      
                       if (file) {
                         // Validate file type
                         const allowedExtensions = ['.pdf', '.jpg', '.jpeg', '.png', '.doc', '.docx'];
@@ -774,11 +896,23 @@ function MyAppointments() {
                         // Check file extension
                         const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
                         const isValidExtension = allowedExtensions.includes(fileExtension);
+                        console.log('🔍 File extension validation:', {
+                          extension: fileExtension,
+                          isValid: isValidExtension,
+                          allowed: allowedExtensions
+                        });
                         
                         // Check file size (10MB = 10 * 1024 * 1024 bytes)
                         const isValidSize = file.size <= 10 * 1024 * 1024;
+                        console.log('📏 File size validation:', {
+                          size: file.size,
+                          sizeMB: (file.size / (1024 * 1024)).toFixed(2),
+                          maxSize: 10 * 1024 * 1024,
+                          isValid: isValidSize
+                        });
                         
                         if (!isValidExtension) {
+                          console.error('❌ Invalid file format:', fileExtension);
                           toast({ 
                             title: 'Invalid file format', 
                             description: 'Accepted formats: PDF, JPG, PNG, DOC, DOCX (Max: 10MB)', 
@@ -788,6 +922,7 @@ function MyAppointments() {
                         }
                         
                         if (!isValidSize) {
+                          console.error('❌ File too large:', file.size);
                           toast({ 
                             title: 'File too large', 
                             description: 'Maximum file size is 10MB', 
@@ -796,7 +931,14 @@ function MyAppointments() {
                           return;
                         }
                         
-                        handleFileUpload(file);
+                        console.log('✅ File validation passed, storing in form state...');
+                        // Store file directly in form state - no separate upload
+                        setCompletionForm({ 
+                          ...completionForm, 
+                          reportFile: file 
+                        });
+                      } else {
+                        console.log('⚠️ No file selected');
                       }
                     }}
                     isDisabled={isUploading}
@@ -860,6 +1002,20 @@ function MyAppointments() {
                                 onClick={() => {
                                   // Open file in new tab
                                   window.open(`${API_BASE}${completionForm.reportFile}`, '_blank');
+                                }}
+                              >
+                                View File
+                              </Button>
+                            )}
+                            {typeof completionForm.reportFile !== 'string' && completionForm.reportFile && (
+                              <Button
+                                size="xs"
+                                colorScheme="blue"
+                                variant="outline"
+                                onClick={() => {
+                                  // Create object URL for viewing
+                                  const fileUrl = URL.createObjectURL(completionForm.reportFile);
+                                  window.open(fileUrl, '_blank');
                                 }}
                               >
                                 View File
@@ -1154,7 +1310,7 @@ function MyAppointments() {
                                   colorScheme="blue"
                                   variant="outline"
                                   onClick={() => {
-                                    window.open(`${API_BASE}${report.reportUrl}`, '_blank');
+                                    window.open(`${BASE}${report.reportUrl}`, '_blank');
                                   }}
                                 >
                                   View Report
@@ -1251,7 +1407,7 @@ function MyAppointments() {
                                 colorScheme="blue"
                                 variant="outline"
                                 onClick={() => {
-                                  window.open(`${API_BASE}${report.reportUrl}`, '_blank');
+                                  window.open(`${BASE}${report.reportUrl}`, '_blank');
                                 }}
                                 mt={2}
                               >

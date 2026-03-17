@@ -7,6 +7,7 @@ import {
   Select,
   SimpleGrid,
   useColorModeValue,
+  Button,
 } from "@chakra-ui/react";
 // Assets
 import Usa from "assets/img/dashboards/usa.png";
@@ -25,6 +26,7 @@ import {
   MdHistory,
   MdBusiness,
   MdSwapCalls,
+  MdRefresh,
 } from "react-icons/md";
 import { useAuth } from 'contexts/AuthContext';
 
@@ -65,47 +67,176 @@ export default function UserReports() {
   }), [user?.permissions]);
 
   // Fetch dashboard statistics
-  useEffect(() => {
-    const fetchDashboardStats = async () => {
-      try {
-        setDashboardData(prev => ({ ...prev, loading: true, error: null }));
-        
-        // Use demo data instead of API calls
-        const demoData = {
-          earnings: 45231.89,
-          spendThisMonth: 3542.12,
-          sales: 52342.19,
-          balance: 41689.77,
-          newTasks: 23,
-          totalProjects: 12,
-          totalUsers: 156,
-          totalDepartments: 8,
-          totalAppointments: 89,
-          totalReferrals: 34,
-          totalReports: 67,
-          totalPatients: 234
-        };
-
-        // Simulate API call delay for better UX
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        setDashboardData({
-          ...demoData,
-          loading: false,
-          error: null
-        });
-
-      } catch (error) {
-        setDashboardData(prev => ({
-          ...prev,
-          loading: false,
-          error: error.message
-        }));
+  const fetchDashboardStats = async () => {
+    try {
+      setDashboardData(prev => ({ ...prev, loading: true, error: null }));
+      
+      // Get token using the same logic as AuthContext
+      const token = localStorage.getItem('token') || sessionStorage.getItem('token') || '';
+      if (!token) {
+        throw new Error('No authentication token found. Please login again.');
       }
-    };
+      
+      // Fetch different data based on permissions
+      const fetchPromises = [];
 
+      // Common data for all users
+      fetchPromises.push(
+        fetch('http://localhost:8002/api/admin/dashboard/stats', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        })
+          .then(async res => {
+            if (!res.ok) {
+              const errorText = await res.text();
+              console.error('Dashboard stats error response:', errorText);
+              throw new Error(`Failed to fetch dashboard stats: ${res.status} ${errorText}`);
+            }
+            const contentType = res.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+              const errorText = await res.text();
+              console.error('Non-JSON response:', errorText);
+              throw new Error('Server returned non-JSON response');
+            }
+            return res.json();
+          })
+          .then(data => ({ earnings: data.earnings || 0, spendThisMonth: data.spendThisMonth || 0, sales: data.sales || 0, balance: data.balance || 0, newTasks: data.newTasks || 0, totalProjects: data.totalProjects || 0 }))
+          .catch(err => ({ error: err.message }))
+      );
+
+      // User management data
+      if (permissions.canManageUsers) {
+        fetchPromises.push(
+          fetch('http://localhost:8002/api/admin/users/count', {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          })
+          .then(async res => {
+            if (!res.ok) {
+              const errorText = await res.text();
+              console.error('User count error response:', errorText);
+              throw new Error(`Failed to fetch user count: ${res.status} ${errorText}`);
+            }
+            const contentType = res.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+              const errorText = await res.text();
+              console.error('Non-JSON response:', errorText);
+              throw new Error('Server returned non-JSON response');
+            }
+            return res.json();
+          })
+          .then(data => ({ totalUsers: data.count || 0, totalDepartments: data.departments || 0 }))
+          .catch(err => ({ error: err.message }))
+        );
+      }
+
+      // Appointment data
+      if (permissions.canManageAppointments) {
+        fetchPromises.push(
+          fetch('http://localhost:8002/api/admin/appointments/count', {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          })
+          .then(async res => {
+            if (!res.ok) {
+              const errorText = await res.text();
+              console.error('Appointment count error response:', errorText);
+              throw new Error(`Failed to fetch appointment count: ${res.status} ${errorText}`);
+            }
+            const contentType = res.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+              const errorText = await res.text();
+              console.error('Non-JSON response:', errorText);
+              throw new Error('Server returned non-JSON response');
+            }
+            return res.json();
+          })
+          .then(data => ({ totalAppointments: data.total || 0, totalReferrals: data.referrals || 0 }))
+          .catch(err => ({ error: err.message }))
+        );
+      }
+
+      // Report data
+      if (permissions.canViewReports) {
+        fetchPromises.push(
+          fetch('http://localhost:8002/api/admin/reports/count', {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          })
+          .then(async res => {
+            if (!res.ok) {
+              const errorText = await res.text();
+              console.error('Report count error response:', errorText);
+              throw new Error(`Failed to fetch report count: ${res.status} ${errorText}`);
+            }
+            const contentType = res.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+              const errorText = await res.text();
+              console.error('Non-JSON response:', errorText);
+              throw new Error('Server returned non-JSON response');
+            }
+            return res.json();
+          })
+          .then(data => ({ totalReports: data.count || 0, totalPatients: data.patients || 0 }))
+          .catch(err => ({ error: err.message }))
+        );
+      }
+
+      // Wait for all fetches to complete
+      const results = await Promise.allSettled(fetchPromises);
+      
+      // Combine all results
+      const combinedData = {
+        totalUsers: 0,
+        totalAppointments: 0,
+        totalReports: 0,
+        totalPatients: 0,
+        totalDepartments: 0,
+        totalReferrals: 0,
+        earnings: 0,
+        spendThisMonth: 0,
+        sales: 0,
+        balance: 0,
+        newTasks: 0,
+        totalProjects: 0,
+        loading: false,
+        error: null
+      };
+
+      results.forEach(result => {
+        if (result.status === 'fulfilled') {
+          Object.assign(combinedData, result.value);
+        } else if (result.reason) {
+          combinedData.error = result.reason.message || 'Failed to fetch data';
+        }
+      });
+
+      setDashboardData(combinedData);
+    } catch (error) {
+      setDashboardData(prev => ({
+        ...prev,
+        loading: false,
+        error: error.message
+      }));
+    }
+  };
+
+  useEffect(() => {
     fetchDashboardStats();
-  }, [permissions.canManageUsers, permissions.canManageAppointments, permissions.canViewReports]);
+  }, []); // Load only on page mount
+
+  // Manual refresh function
+  const handleRefresh = () => {
+    fetchDashboardStats();
+  };
 
   if (dashboardData.loading) {
     return (
@@ -137,6 +268,19 @@ export default function UserReports() {
 
   return (
     <Box pt={{ base: "130px", md: "80px", xl: "80px" }}>
+      {/* Refresh Button */}
+      <Flex justify="flex-end" mb="20px">
+        <Button
+          leftIcon={<MdRefresh />}
+          onClick={handleRefresh}
+          isLoading={dashboardData.loading}
+          colorScheme="blue"
+          variant="solid"
+        >
+          Refresh Data
+        </Button>
+      </Flex>
+      
       <SimpleGrid
         columns={{ base: 1, md: 2, lg: 3, "2xl": 6 }}
         gap='20px'
@@ -245,7 +389,7 @@ export default function UserReports() {
         )}
 
         {/* Financial Statistics - For all users */}
-        <MiniStatistics
+        {/* <MiniStatistics
           startContent={
             <IconBox
               w='56px'
@@ -257,9 +401,9 @@ export default function UserReports() {
             />
           }
           name='Earnings'
-          value={`$${dashboardData.earnings.toFixed(2)}`}
-        />
-        <MiniStatistics
+          value={`Rs ${dashboardData.earnings.toFixed(2)}`}
+        /> */}
+        {/* <MiniStatistics
           startContent={
             <IconBox
               w='56px'
@@ -271,11 +415,11 @@ export default function UserReports() {
             />
           }
           name='Spend this month'
-          value={`$${dashboardData.spendThisMonth.toFixed(2)}`}
-        />
+          value={`Rs ${dashboardData.spendThisMonth.toFixed(2)}`}
+        /> */}
         
         {/* Task Statistics - For all users */}
-        <MiniStatistics growth='+23%' name='Sales' value={`$${dashboardData.sales.toFixed(2)}`} />
+        <MiniStatistics growth='+23%' name='Sales' value={`Rs ${dashboardData.sales.toFixed(2)}`} />
         <MiniStatistics
           endContent={
             <Flex me='-16px' mt='10px'>
@@ -295,7 +439,7 @@ export default function UserReports() {
             </Flex>
           }
           name='Your balance'
-          value={`$${dashboardData.balance.toFixed(2)}`}
+          value={`Rs ${dashboardData.balance.toFixed(2)}`}
         />
         <MiniStatistics
           startContent={

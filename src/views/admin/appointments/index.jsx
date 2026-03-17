@@ -36,7 +36,7 @@ import {
 import { useAuth } from '../../../contexts/AuthContext';
 
 const API_BASE = 'http://localhost:8002/api';
-
+const BASE = 'http://localhost:8002';
 export default function AppointmentsAdmin() {
   const { token, user } = useAuth();
   const toast = useToast();
@@ -965,7 +965,7 @@ export default function AppointmentsAdmin() {
                             Process Payment
                           </Button>
                         )}
-                        {appt.status === 'SCHEDULED' && (
+                        {/* {appt.status === 'SCHEDULED' && (
                           <Button 
                             size="sm" 
                             colorScheme="green" 
@@ -973,7 +973,7 @@ export default function AppointmentsAdmin() {
                           >
                             Complete/Refer
                           </Button>
-                        )}
+                        )} */}
                         <Button 
                           size="sm" 
                           colorScheme="blue" 
@@ -1890,7 +1890,7 @@ export default function AppointmentsAdmin() {
                                   colorScheme="blue"
                                   variant="outline"
                                   onClick={() => {
-                                    window.open(`${API_BASE}${report.reportUrl}`, '_blank');
+                                    window.open(`${BASE}${report.reportUrl}`, '_blank');
                                   }}
                                 >
                                   View Report
@@ -1987,7 +1987,7 @@ export default function AppointmentsAdmin() {
                                 colorScheme="blue"
                                 variant="outline"
                                 onClick={() => {
-                                  window.open(`${API_BASE}${report.reportUrl}`, '_blank');
+                                  window.open(`${BASE}${report.reportUrl}`, '_blank');
                                 }}
                                 mt={2}
                               >

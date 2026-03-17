@@ -37,6 +37,7 @@ import {
 import { useAuth } from '../../../contexts/AuthContext';
 
 const API_BASE = 'http://localhost:8002/api';
+const BASE = 'http://localhost:8002';
 
 export default function PatientHistory() {
   const { token, user } = useAuth();
@@ -337,6 +338,21 @@ export default function PatientHistory() {
                                               <Text fontSize="sm">{visit.medicalReport.prescription}</Text>
                                             </Box>
                                           )}
+                                           {visit.medicalReport.reportUrl && (
+                                                                        <HStack>
+                                                                          <Text fontWeight="500" w="100px">Report File:</Text>
+                                                                          <Button
+                                                                            size="sm"
+                                                                            colorScheme="blue"
+                                                                            variant="outline"
+                                                                            onClick={() => {
+                                                                              window.open(`${BASE}${visit.medicalReport.reportUrl}`, '_blank');
+                                                                            }}
+                                                                          >
+                                                                            View Report
+                                                                          </Button>
+                                                                        </HStack>
+                                                                      )}
                                         </SimpleGrid>
                                       </Box>
                                     )}
